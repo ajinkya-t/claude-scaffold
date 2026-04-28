@@ -98,8 +98,10 @@ agents_file_strategy:
 
 mcps:
   type: str
-  help: "MCP servers to enable (comma-separated; default safe pair = github,filesystem)"
-  default: "github,filesystem"
+  help: "MCP servers to enable (default safe pair = github, filesystem)"
+  default:
+    - github
+    - filesystem
   multiselect: true
   choices:
     - github
@@ -125,7 +127,11 @@ chrome_extension:
 hooks:
   type: str
   help: "Hooks to install (default: all four)"
-  default: "block-secret-edits,block-dangerous-bash,tests-before-pr,route-perms-to-opus"
+  default:
+    - block-secret-edits
+    - block-dangerous-bash
+    - tests-before-pr
+    - route-perms-to-opus
   multiselect: true
   choices:
     - block-secret-edits
@@ -140,7 +146,11 @@ hooks:
 subagents:
   type: str
   help: "Subagents to install (default: all four)"
-  default: "code-reviewer,test-writer,debugger,security-auditor"
+  default:
+    - code-reviewer
+    - test-writer
+    - debugger
+    - security-auditor
   multiselect: true
   choices:
     - code-reviewer
