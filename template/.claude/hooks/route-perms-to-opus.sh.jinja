@@ -39,7 +39,7 @@ fi
 # `claude` is on your PATH. This will spawn a one-shot Opus call to
 # evaluate the request.
 #
-# response="$(echo "$input" | claude -p "Is this tool call safe? Reply with JSON: {\"safe\": bool, \"reason\": string}" --model claude-opus-4-5 --output-format json 2>/dev/null || echo '{}')"
+# response="$(echo "$input" | claude -p "Is this tool call safe? Reply with JSON: {\"safe\": bool, \"reason\": string}" --model {{ model_high }} --output-format json 2>/dev/null || echo '{}')"
 # safe="$(echo "$response" | jq -r '.safe // false')"
 # if [[ "$safe" == "true" ]]; then
 #   exit 0

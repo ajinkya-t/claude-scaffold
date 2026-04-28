@@ -39,6 +39,9 @@ def render(tmp_path: Path, **overrides: Any) -> Path:
         "subagents": ["code-reviewer", "test-writer", "debugger", "security-auditor"],
         "output_style": "concise",
         "model_routing": "boris-defaults",
+        "model_high": "claude-opus-4-5",
+        "model_mid": "claude-sonnet-4-5",
+        "model_low": "claude-haiku-4-5",
         "include_superpowers_skills": False,
         "enable_superpowers": False,
         "enable_bmad": False,
@@ -334,15 +337,21 @@ def test_superpowers_on_agents_md_declares_user_priority_section(tmp_path: Path)
     assert "User-Review-Gate" in agents_md
     # Must include the security trigger keyword list
     assert "auth" in agents_md and "secret" in agents_md and "upload" in agents_md
-    # Workflow section should NOT mention /plan, /tdd, /review (those are dropped)
+    # Workflow section should NOT mention /plan, /tdd, /review (those are dropped).
+    # Look at JUST the Workflow section, not subsequent sections like Routing or Boundaries.
     workflow_idx = agents_md.find("## Workflow")
-    boundaries_idx = agents_md.find("## Boundaries")
-    workflow_section = agents_md[workflow_idx:boundaries_idx]
+    next_section_idx = agents_md.find("\n## ", workflow_idx + len("## Workflow"))
+    workflow_section = agents_md[workflow_idx:next_section_idx]
     assert "/plan" not in workflow_section
     assert "/tdd" not in workflow_section
-    # /review-with-superpowers is fine, but bare /review should not appear
-    workflow_section_no_shim = workflow_section.replace("/review-with-superpowers", "")
-    assert "/review" not in workflow_section_no_shim
+    # /review-with-superpowers and /security-review both contain "/review" as a substring.
+    # The dropped command was bare /review. Strip both compound forms first.
+    workflow_section_no_compound = (
+        workflow_section
+        .replace("/review-with-superpowers", "")
+        .replace("/security-review", "")
+    )
+    assert "/review" not in workflow_section_no_compound
 
 
 def test_superpowers_off_agents_md_uses_v2_workflow(tmp_path: Path) -> None:
@@ -350,8 +359,8 @@ def test_superpowers_off_agents_md_uses_v2_workflow(tmp_path: Path) -> None:
     agents_md = (dst / "AGENTS.md").read_text()
     assert "Superpowers integration" not in agents_md
     workflow_idx = agents_md.find("## Workflow")
-    boundaries_idx = agents_md.find("## Boundaries")
-    workflow_section = agents_md[workflow_idx:boundaries_idx]
+    next_section_idx = agents_md.find("\n## ", workflow_idx + len("## Workflow"))
+    workflow_section = agents_md[workflow_idx:next_section_idx]
     assert "/plan" in workflow_section
     assert "/review" in workflow_section
 
@@ -360,3 +369,121 @@ def test_superpowers_off_does_not_ship_skills(tmp_path: Path) -> None:
     dst = render(tmp_path, enable_superpowers=False)
     assert not (dst / ".claude" / "skills" / "design-review").exists()
     assert not (dst / ".claude" / "skills" / "spec-security-review").exists()
+
+
+# ---------------------------------------------------------------------------
+# Model routing — single source of truth flows everywhere
+# ---------------------------------------------------------------------------
+
+
+def test_boris_defaults_routes_three_tiers(tmp_path: Path) -> None:
+    """Default routing: Opus high, Sonnet mid (session default), Haiku low."""
+    dst = render(tmp_path, model_routing="boris-defaults",
+                 model_high="claude-opus-4-5",
+                 model_mid="claude-sonnet-4-5",
+                 model_low="claude-haiku-4-5")
+    settings = json.loads((dst / ".claude" / "settings.json").read_text())
+    assert settings["model"] == "claude-sonnet-4-5"
+
+    # /commit and /techdebt -> low
+    assert "model: claude-haiku-4-5" in (dst / ".claude" / "commands" / "commit.md").read_text()
+    assert "model: claude-haiku-4-5" in (dst / ".claude" / "commands" / "techdebt.md").read_text()
+
+    # /review -> mid
+    assert "model: claude-sonnet-4-5" in (dst / ".claude" / "commands" / "review.md").read_text()
+
+    # /security-review -> high
+    assert "model: claude-opus-4-5" in (dst / ".claude" / "commands" / "security-review.md").read_text()
+
+    # security-auditor agent -> high
+    assert "model: claude-opus-4-5" in (dst / ".claude" / "agents" / "security-auditor.md").read_text()
+
+
+def test_sonnet_only_routes_all_to_sonnet(tmp_path: Path) -> None:
+    """sonnet-only: every tier collapses to Sonnet."""
+    dst = render(tmp_path, model_routing="sonnet-only",
+                 model_high="claude-sonnet-4-5",
+                 model_mid="claude-sonnet-4-5",
+                 model_low="claude-sonnet-4-5")
+    settings = json.loads((dst / ".claude" / "settings.json").read_text())
+    assert settings["model"] == "claude-sonnet-4-5"
+    # Even /commit (normally Haiku) should be Sonnet
+    assert "model: claude-sonnet-4-5" in (dst / ".claude" / "commands" / "commit.md").read_text()
+    # Even security-auditor (normally Opus) should be Sonnet
+    assert "model: claude-sonnet-4-5" in (dst / ".claude" / "agents" / "security-auditor.md").read_text()
+    assert "claude-opus" not in (dst / ".claude" / "agents" / "security-auditor.md").read_text()
+    assert "claude-haiku" not in (dst / ".claude" / "commands" / "commit.md").read_text()
+
+
+def test_opus_heavy_routes_high_and_mid_to_opus(tmp_path: Path) -> None:
+    dst = render(tmp_path, model_routing="opus-heavy",
+                 model_high="claude-opus-4-5",
+                 model_mid="claude-opus-4-5",
+                 model_low="claude-sonnet-4-5")
+    settings = json.loads((dst / ".claude" / "settings.json").read_text())
+    assert settings["model"] == "claude-opus-4-5"
+    # /commit (low) -> Sonnet (Haiku not used in opus-heavy)
+    assert "model: claude-sonnet-4-5" in (dst / ".claude" / "commands" / "commit.md").read_text()
+    # /security-review (high) and /review (mid) both Opus
+    assert "model: claude-opus-4-5" in (dst / ".claude" / "commands" / "security-review.md").read_text()
+    assert "model: claude-opus-4-5" in (dst / ".claude" / "commands" / "review.md").read_text()
+
+
+def test_routing_flows_to_ci_workflows(tmp_path: Path) -> None:
+    """CI workflows derive their --model arg from the same tier vars."""
+    dst = render(tmp_path, model_routing="boris-defaults",
+                 model_high="claude-opus-4-5",
+                 model_mid="claude-sonnet-4-5",
+                 model_low="claude-haiku-4-5",
+                 ci_review=True)
+    review_yml = (dst / ".github" / "workflows" / "claude-review.yml").read_text()
+    techdebt_yml = (dst / ".github" / "workflows" / "claude-techdebt.yml").read_text()
+    # claude-review uses mid, claude-techdebt uses low
+    assert "claude-sonnet-4-5" in review_yml
+    assert "claude-haiku-4-5" in techdebt_yml
+
+
+def test_routing_flows_to_perms_hook(tmp_path: Path) -> None:
+    """The Opus scanning reference in the perms hook uses model_high."""
+    dst = render(tmp_path, model_routing="boris-defaults",
+                 model_high="claude-opus-4-5",
+                 model_mid="claude-sonnet-4-5",
+                 model_low="claude-haiku-4-5")
+    hook = (dst / ".claude" / "hooks" / "route-perms-to-opus.sh").read_text()
+    # The (commented-out) Opus scanning block references model_high
+    assert "claude-opus-4-5" in hook
+    # And no orphaned Jinja syntax left over
+    assert "{{ " not in hook and "{% " not in hook
+
+
+def test_routing_table_appears_in_agents_md(tmp_path: Path) -> None:
+    dst = render(tmp_path, model_routing="boris-defaults",
+                 model_high="claude-opus-4-5",
+                 model_mid="claude-sonnet-4-5",
+                 model_low="claude-haiku-4-5")
+    agents_md = (dst / "AGENTS.md").read_text()
+    assert "## Model routing" in agents_md
+    assert "boris-defaults" in agents_md
+    assert "claude-opus-4-5" in agents_md
+    assert "claude-sonnet-4-5" in agents_md
+    assert "claude-haiku-4-5" in agents_md
+    # The three tiers are explicitly named
+    assert "high" in agents_md and "mid" in agents_md and "low" in agents_md
+
+
+def test_no_orphan_jinja_in_any_rendered_file(tmp_path: Path) -> None:
+    """Catch-all: no rendered file should contain unrendered {{ ... }} or {% ... %}."""
+    dst = render(tmp_path)
+    for path in dst.rglob("*"):
+        if path.is_file() and path.suffix in (".md", ".yml", ".yaml", ".json", ".sh"):
+            content = path.read_text(errors="ignore")
+            # Allow GitHub Actions ${{ ... }} which is escaped via Copier as ${{ '{{' }}
+            # After rendering it appears as ${{ ... }} which we should not flag
+            # So we check for bare {{ or {% (without the $ prefix)
+            for line_num, line in enumerate(content.splitlines(), 1):
+                # strip GitHub Actions interpolation
+                line_clean = line.replace("${{", "").replace("$  {{", "")
+                if "{{ " in line_clean or "{%" in line_clean:
+                    raise AssertionError(
+                        f"Orphan Jinja in {path.relative_to(dst)}:{line_num}: {line!r}"
+                    )

@@ -24,7 +24,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ '{{' }} secrets.ANTHROPIC_API_KEY {{ '}}' }}
-          claude_args: "--model claude-haiku-4-5"
+          claude_args: "--model {{ model_low }}"
           prompt: |
             Scan only the changed files in this PR for:
             1. Duplicated functions or near-duplicated logic (compare against existing code, not just within the diff)

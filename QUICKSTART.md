@@ -4,7 +4,7 @@
 
 ```bash
 cd ~/projects/claude-scaffold
-uv venv && uv sync          # or: python3 -m pip install copier pytest pyyaml
+uv venv && uv sync          # or: pip install copier pytest pyyaml
 uv run pytest               # should be 19/19 passing
 ```
 

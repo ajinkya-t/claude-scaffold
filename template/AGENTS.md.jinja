@@ -56,6 +56,18 @@ This sits *inside* the brainstorming flow's existing User-Review-Gate. It does n
 If `superpowers:brainstorming` skips this step, the user can manually invoke either skill at any time during the gate window.
 {%- endif %}
 
+## Model routing
+
+Routing strategy: `{{ model_routing }}`
+
+| Tier | Model | Used for |
+|---|---|---|
+| high | `{{ model_high }}` | `/security-review`, `security-auditor` agent, permission-hook scanning |
+| mid (default) | `{{ model_mid }}` | session default, `/review`{% if enable_superpowers %}, `/review-with-superpowers`{% endif %}, ad-hoc work |
+| low | `{{ model_low }}` | `/commit`, `/techdebt`, mechanical/formatting tasks |
+
+To change routing later: edit `model_routing` in `.copier-answers.yml` and re-run `copier update`. Or override per-command by editing the `model:` line in the relevant `.claude/commands/*.md` or `.claude/agents/*.md` file.
+
 ## Boundaries
 **Always**: tests pass before declaring done; new code paths get tests; follow existing patterns.
 **Ask first**: schema migrations, new dependencies, CI/infra changes.

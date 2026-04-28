@@ -9,7 +9,11 @@ _skip_if_exists:
   - ".pre-commit-config.yaml"
 
 _tasks:
+  # When Superpowers is on, drop the redundant commands and subagents.
+  # /plan and /tdd ship as plain .md (no model interpolation needed).
+  # /review and code-reviewer/test-writer/debugger ship as .md after Jinja stripping.
   - "{% if enable_superpowers %}rm -f .claude/commands/plan.md .claude/commands/tdd.md .claude/commands/review.md .claude/agents/code-reviewer.md .claude/agents/test-writer.md .claude/agents/debugger.md{% endif %}"
+  # When Superpowers is off, drop the integration skills and shim.
   - "{% if not enable_superpowers %}rm -rf .claude/skills/design-review .claude/skills/spec-security-review .claude/commands/review-with-superpowers.md{% endif %}"
   - "{% if git_init %}git init -q && git add -A && git commit -q -m 'chore: scaffold from claude-scaffold' || true{% endif %}"
   - "{% if pre_commit %}pre-commit install -q 2>/dev/null || echo 'pre-commit not installed; run: uvx pre-commit install'{% endif %}"
@@ -94,8 +98,8 @@ agents_file_strategy:
 
 mcps:
   type: str
-  help: "MCP servers to enable (default safe pair = github, filesystem)"
-  default: [github, filesystem]
+  help: "MCP servers to enable (comma-separated; default safe pair = github,filesystem)"
+  default: "github,filesystem"
   multiselect: true
   choices:
     - github
@@ -121,7 +125,7 @@ chrome_extension:
 hooks:
   type: str
   help: "Hooks to install (default: all four)"
-  default: [block-secret-edits, block-dangerous-bash, tests-before-pr, route-perms-to-opus]
+  default: "block-secret-edits,block-dangerous-bash,tests-before-pr,route-perms-to-opus"
   multiselect: true
   choices:
     - block-secret-edits
@@ -136,7 +140,7 @@ hooks:
 subagents:
   type: str
   help: "Subagents to install (default: all four)"
-  default: [code-reviewer, test-writer, debugger, security-auditor]
+  default: "code-reviewer,test-writer,debugger,security-auditor"
   multiselect: true
   choices:
     - code-reviewer
@@ -159,19 +163,45 @@ output_style:
 
 # ---------------------------------------------------------------------------
 # Model routing
+#
+# Three task tiers mapped to three model strings. Every command, agent, hook,
+# and CI workflow that pins a model derives it from these three variables,
+# so changing the routing in one place flows everywhere.
+#
+# Tiers:
+#   high — architecture, security review, permission-hook scanning
+#   mid  — plan, iterate, refactor, code review, default for ad-hoc sessions
+#   low  — /commit, /techdebt, mechanical formatting/cleanup
 # ---------------------------------------------------------------------------
 
 model_routing:
   type: str
   help: |
-    'boris-defaults' = Opus for arch/security/permission-hooks, Sonnet for plan/iterate, Haiku for /commit /techdebt
-    'sonnet-only' = Single model everywhere
-    'opus-heavy' = Opus default, Sonnet for mechanical
+    'boris-defaults' = Opus 4.5 (high), Sonnet 4.5 (mid), Haiku 4.5 (low)
+    'sonnet-only'    = Sonnet 4.5 for all three tiers (single-model setup)
+    'opus-heavy'     = Opus 4.5 (high+mid), Sonnet 4.5 (low) — bias toward depth
   choices:
     - boris-defaults
     - sonnet-only
     - opus-heavy
   default: boris-defaults
+
+# Tier -> model string. Computed from model_routing; the rest of the template
+# only references model_high, model_mid, model_low.
+model_high:
+  type: str
+  when: false
+  default: "{% if model_routing == 'boris-defaults' or model_routing == 'opus-heavy' %}claude-opus-4-5{% else %}claude-sonnet-4-5{% endif %}"
+
+model_mid:
+  type: str
+  when: false
+  default: "{% if model_routing == 'opus-heavy' %}claude-opus-4-5{% else %}claude-sonnet-4-5{% endif %}"
+
+model_low:
+  type: str
+  when: false
+  default: "{% if model_routing == 'boris-defaults' %}claude-haiku-4-5{% else %}claude-sonnet-4-5{% endif %}"
 
 # ---------------------------------------------------------------------------
 # Methodology layers (opt-in)
