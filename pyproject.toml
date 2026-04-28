@@ -11,7 +11,10 @@ dependencies = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v"
+addopts = "-v -m 'not live'"
+markers = [
+    "live: hits the real Anthropic API; opt-in (run with `pytest -m live`)",
+]
 
 [tool.ruff]
 line-length = 100

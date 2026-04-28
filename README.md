@@ -48,6 +48,19 @@ uvx copier update --trust
 - Claude Code installed (https://claude.com/code)
 - Optional: `gh` CLI for GitHub integration, `pre-commit` for the bundled hooks
 
+## Tests
+
+The scaffold ships with a static `pytest` suite that renders the template under several Copier answer combos and asserts the rendered files are correct. Run `pytest` from the repo root.
+
+There is also an opt-in **live runtime** suite that drives `claude -p` headless against a freshly rendered scaffold and verifies model routing actually resolves to the expected tier on the wire (Opus / Sonnet / Haiku, with or without `[1m]`). Covers both `enable_superpowers` modes and the tier-pinned `/sp-*` shims. Skipped by default. To run:
+
+```bash
+pytest -m live              # uses `claude auth` login (Pro/Max) if present
+ANTHROPIC_API_KEY=... pytest -m live
+```
+
+Costs <$0.40 per run (~17 API calls) and requires the `claude` CLI on `PATH`.
+
 ## What this is not
 
 - **Not a 100-agent mega-collection.** Use `wshobson/agents`, `VoltAgent/awesome-claude-code-subagents`, `hesreallyhim/awesome-claude-code` as catalogs. This scaffold is intentionally minimal.
