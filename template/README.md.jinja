@@ -37,7 +37,7 @@ uvx pre-commit install
 This project uses a Claude Code harness scaffolded from [claude-scaffold](https://github.com/ajinkya-t/claude-scaffold).
 
 Key conventions:
-- One chat per task; use `claude --worktree <n>` for parallel work
+- One chat per task; for parallel work, create a `git worktree` and start a fresh Claude session there
 - `/plan` before non-trivial work, `/review` before `/commit`, `/techdebt` at end of session
 - Agent instructions live in `AGENTS.md` (vendor-neutral, read by Codex/Cursor/Aider too)
 - Settings, hooks, subagents, and skills in `.claude/`

@@ -1,9 +1,12 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+{%- if output_style != 'default' %}
   "outputStyle": "{{ output_style }}",
+{%- endif %}
   "model": "{{ model_mid }}",
   "attribution": {
-    "commit": ""
+    "commit": "",
+    "pullRequest": ""
   },
   "permissions": {
     "allow": [
@@ -26,9 +29,7 @@
       "Bash(jq:*)",
       "Bash(tree:*)",
 {% if language == 'python' and package_manager == 'uv' -%}
-      "Bash(uv run:*)",
-      "Bash(uv sync:*)",
-      "Bash(uv add:*)",
+      "Bash(uv:*)",
       "Bash(uvx:*)",
       "Bash(pytest:*)",
       "Bash(ruff:*)",
@@ -38,15 +39,10 @@
       "Bash(pytest:*)",
       "Bash(pip:*)",
 {%- elif language == 'typescript' -%}
-      "Bash({{ package_manager }} run:*)",
-      "Bash({{ package_manager }} test:*)",
-      "Bash({{ package_manager }} install:*)",
+      "Bash({{ package_manager }}:*)",
       "Bash(npx:*)",
 {%- elif language == 'go' -%}
-      "Bash(go test:*)",
-      "Bash(go build:*)",
-      "Bash(go run:*)",
-      "Bash(go mod:*)",
+      "Bash(go:*)",
 {%- elif language == 'rust' -%}
       "Bash(cargo:*)",
 {%- endif %}
@@ -74,47 +70,25 @@
     ]
   },
   "hooks": {
-{%- set hook_entries = [] %}
+{%- set pre_tool_use_hooks = [] %}
 {%- if 'block-secret-edits' in hooks %}
-{%- set _ = hook_entries.append(('PreToolUse', {
-  "matcher": "Edit|Write|MultiEdit",
-  "hooks": [
-    {
-      "type": "command",
-      "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/block-secret-edits.sh"
-    }
-  ]
-})) %}
+{%- set _ = pre_tool_use_hooks.append({"matcher": "Edit|Write|MultiEdit", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/block-secret-edits.sh"}) %}
+{%- endif %}
+{%- if 'warn-on-lockfile-edit' in hooks %}
+{%- set _ = pre_tool_use_hooks.append({"matcher": "Edit|Write|MultiEdit", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/warn-on-lockfile-edit.sh"}) %}
 {%- endif %}
 {%- if 'block-dangerous-bash' in hooks %}
-{%- set _ = hook_entries.append(('PreToolUse', {
-  "matcher": "Bash",
-  "hooks": [
-    {
-      "type": "command",
-      "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/block-dangerous-bash.sh"
-    }
-  ]
-})) %}
+{%- set _ = pre_tool_use_hooks.append({"matcher": "Bash", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/block-dangerous-bash.sh"}) %}
 {%- endif %}
 {%- if 'tests-before-pr' in hooks %}
-{%- set _ = hook_entries.append(('PreToolUse', {
-  "matcher": "mcp__github__create_pull_request|Bash(gh pr create:*)",
-  "hooks": [
-    {
-      "type": "command",
-      "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/tests-before-pr.sh"
-    }
-  ]
-})) %}
+{%- set _ = pre_tool_use_hooks.append({"matcher": "Bash|mcp__github__create_pull_request", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/tests-before-pr.sh"}) %}
 {%- endif %}
-{%- set pre_tool_use_hooks = [] %}
-{%- for event_name, entry in hook_entries %}
-{%- if event_name == 'PreToolUse' %}
-{%- set _ = pre_tool_use_hooks.append(entry) %}
-{%- endif %}
-{%- endfor %}
-{%- if pre_tool_use_hooks %}
+{%- set top_level_blocks = [] %}
+{%- if pre_tool_use_hooks %}{% set _ = top_level_blocks.append('PreToolUse') %}{% endif %}
+{%- if 'route-perms-to-opus' in hooks %}{% set _ = top_level_blocks.append('PermissionRequest') %}{% endif %}
+{%- if 'notify-on-stop' in hooks %}{% set _ = top_level_blocks.append('Stop') %}{% endif %}
+{%- for block_name in top_level_blocks %}
+{%- if block_name == 'PreToolUse' %}
     "PreToolUse": [
 {%- for entry in pre_tool_use_hooks %}
       {
@@ -122,14 +96,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "{{ entry.hooks[0].command }}"
+            "command": "{{ entry.command }}"
           }
         ]
       }{% if not loop.last %},{% endif %}
 {%- endfor %}
-    ]{% if 'route-perms-to-opus' in hooks %},{% endif %}
-{%- endif %}
-{%- if 'route-perms-to-opus' in hooks %}
+    ]{% if not loop.last %},{% endif %}
+{%- elif block_name == 'PermissionRequest' %}
     "PermissionRequest": [
       {
         "hooks": [
@@ -139,7 +112,19 @@
           }
         ]
       }
-    ]
+    ]{% if not loop.last %},{% endif %}
+{%- elif block_name == 'Stop' %}
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/notify-on-stop.sh"
+          }
+        ]
+      }
+    ]{% if not loop.last %},{% endif %}
 {%- endif %}
+{%- endfor %}
   }
 }

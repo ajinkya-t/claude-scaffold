@@ -2,7 +2,7 @@
 # {{ project_name }}
 
 @AGENTS.md
-{%- elif agents_file_strategy == 'claude-md' -%}
+{%- else -%}
 # {{ project_name }} — Agent Instructions
 
 {% if project_description %}{{ project_description }}{% endif %}
@@ -18,7 +18,7 @@
 - `.claude/` agent harness — see `.claude/skills/repo-conventions/` for details
 
 ## Workflow
-- One chat per task. Prefer `claude --worktree <n>` for parallel work.
+- One chat per task. For parallel work: `git worktree add ../{{ project_name }}-<feature> -b feat/<feature>`.
 - `/plan` before non-trivial work; skip if you can describe the diff in one sentence.
 - Run `/review` before `/commit`. Run `/techdebt` at end of session.
 - Conventional Commits, one logical change per commit.
@@ -31,8 +31,4 @@
 ## Notes
 - Personal overrides go in `CLAUDE.local.md` (gitignored).
 - Library docs: WebFetch on demand. Don't guess current APIs.
-{%- else -%}
-# {{ project_name }}
-
-@AGENTS.md
 {%- endif %}

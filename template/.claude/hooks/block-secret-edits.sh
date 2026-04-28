@@ -7,6 +7,11 @@
 
 set -euo pipefail
 
+if ! command -v jq >/dev/null 2>&1; then
+  echo "block-secret-edits: jq not installed — skipping (install: brew install jq)" >&2
+  exit 0
+fi
+
 # Read the tool call JSON from stdin
 input="$(cat)"
 

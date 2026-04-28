@@ -4,7 +4,7 @@ description: |
   Reviews code changes for correctness, clarity, and maintainability.
   Use proactively after writing or editing non-trivial code, and before commits.
   Works against `git diff HEAD` by default, or any code blob you pass in.
-tools: Bash(git diff:*), Bash(git log:*), Read, Glob, Grep
+tools: Bash, Read, Glob, Grep
 model: inherit
 ---
 

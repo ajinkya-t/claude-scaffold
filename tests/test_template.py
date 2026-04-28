@@ -35,14 +35,14 @@ def render(tmp_path: Path, **overrides: Any) -> Path:
             "block-dangerous-bash",
             "tests-before-pr",
             "route-perms-to-opus",
+            "warn-on-lockfile-edit",
         ],
         "subagents": ["code-reviewer", "test-writer", "debugger", "security-auditor"],
         "output_style": "concise",
-        "model_routing": "boris-defaults",
-        "model_high": "claude-opus-4-5",
-        "model_mid": "claude-sonnet-4-5",
-        "model_low": "claude-haiku-4-5",
-        "include_superpowers_skills": False,
+        "model_routing": "latest",
+        "model_high": "opus",
+        "model_mid": "sonnet",
+        "model_low": "haiku",
         "enable_superpowers": False,
         "enable_bmad": False,
         "ci_review": True,
@@ -97,7 +97,7 @@ def test_all_four_subagents_exist(tmp_path: Path) -> None:
     assert expected.issubset(actual)
 
 
-def test_all_four_hooks_exist_and_executable(tmp_path: Path) -> None:
+def test_default_hooks_exist_and_have_shebangs(tmp_path: Path) -> None:
     dst = render(tmp_path)
     hooks_dir = dst / ".claude" / "hooks"
     expected = {
@@ -105,6 +105,7 @@ def test_all_four_hooks_exist_and_executable(tmp_path: Path) -> None:
         "block-dangerous-bash.sh",
         "tests-before-pr.sh",
         "route-perms-to-opus.sh",
+        "warn-on-lockfile-edit.sh",
     }
     actual = {p.name for p in hooks_dir.iterdir() if p.is_file()}
     assert expected.issubset(actual)
@@ -113,6 +114,18 @@ def test_all_four_hooks_exist_and_executable(tmp_path: Path) -> None:
     for hook_name in expected:
         first_line = (hooks_dir / hook_name).read_text().splitlines()[0]
         assert first_line.startswith("#!"), f"{hook_name} missing shebang"
+
+
+def test_notify_on_stop_hook_renders_when_selected(tmp_path: Path) -> None:
+    dst = render(tmp_path, hooks=[
+        "block-secret-edits", "block-dangerous-bash",
+        "tests-before-pr", "route-perms-to-opus",
+        "warn-on-lockfile-edit", "notify-on-stop",
+    ])
+    hook_path = dst / ".claude" / "hooks" / "notify-on-stop.sh"
+    assert hook_path.exists()
+    settings = json.loads((dst / ".claude" / "settings.json").read_text())
+    assert "Stop" in settings["hooks"], "Stop event missing from settings.hooks"
 
 
 def test_repo_conventions_skill_exists(tmp_path: Path) -> None:
@@ -139,8 +152,8 @@ def test_settings_json_is_valid_json(tmp_path: Path) -> None:
     settings = json.loads((dst / ".claude" / "settings.json").read_text())
     assert "permissions" in settings
     assert "hooks" in settings
-    # Boris-defaults uses Sonnet as base model
-    assert "sonnet" in settings.get("model", "").lower()
+    # 'latest' routing uses sonnet alias as the session default
+    assert settings.get("model", "") == "sonnet"
 
 
 def test_mcp_json_is_valid_json(tmp_path: Path) -> None:
@@ -238,6 +251,98 @@ def test_block_dangerous_bash_catches_rm_rf_root(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Settings deny-list sanity
 # ---------------------------------------------------------------------------
+
+
+def test_tests_before_pr_matcher_uses_tool_names(tmp_path: Path) -> None:
+    """C1 regression: matcher must use tool names, not permission specs."""
+    dst = render(tmp_path)
+    settings = json.loads((dst / ".claude" / "settings.json").read_text())
+    pre_tool = settings["hooks"]["PreToolUse"]
+    matchers = [entry["matcher"] for entry in pre_tool]
+    # Find the tests-before-pr entry
+    tests_entries = [
+        m for m in matchers
+        if "mcp__github__create_pull_request" in m or "tests-before-pr" in str(pre_tool)
+    ]
+    assert any("Bash|mcp__github__create_pull_request" == m for m in matchers), (
+        f"tests-before-pr matcher should be 'Bash|mcp__github__create_pull_request', got {matchers!r}"
+    )
+    # No matcher should contain permission-spec syntax
+    for m in matchers:
+        assert "(" not in m and ":*" not in m, (
+            f"matcher {m!r} looks like a permission spec, not a tool-name regex"
+        )
+
+
+def test_tests_before_pr_script_self_filters(tmp_path: Path) -> None:
+    """C1 regression: the script must short-circuit when not actually creating a PR."""
+    dst = render(tmp_path)
+    hook = (dst / ".claude" / "hooks" / "tests-before-pr.sh").read_text()
+    assert "is_pr_create" in hook
+    assert "gh[[:space:]]+pr[[:space:]]+create" in hook
+    assert "mcp__github__create_pull_request" in hook
+
+
+def test_perms_hook_writes_decision_to_stdout(tmp_path: Path) -> None:
+    """C2 regression: permission decisions must go to stdout, not stderr."""
+    dst = render(tmp_path)
+    hook = (dst / ".claude" / "hooks" / "route-perms-to-opus.sh").read_text()
+    # The two structured-decision invocations must NOT redirect to stderr
+    decision_lines = [
+        line for line in hook.splitlines()
+        if "permissionDecision" in line and "jq -n" in line
+    ]
+    assert decision_lines, "expected at least one jq -n permissionDecision line"
+    for line in decision_lines:
+        assert ">&2" not in line, (
+            f"permission decision line redirects to stderr: {line!r}"
+        )
+
+
+def test_agent_tools_field_uses_plain_names(tmp_path: Path) -> None:
+    """C4 regression: agent `tools:` frontmatter takes tool names, not permission specs."""
+    dst = render(tmp_path)
+    agent_dir = dst / ".claude" / "agents"
+    for agent_file in agent_dir.glob("*.md"):
+        content = agent_file.read_text()
+        # Extract frontmatter block
+        lines = content.splitlines()
+        assert lines[0] == "---", f"{agent_file.name}: missing frontmatter"
+        end = lines.index("---", 1)
+        for line in lines[1:end]:
+            if line.startswith("tools:"):
+                value = line.split(":", 1)[1].strip()
+                assert "(" not in value and ":*" not in value, (
+                    f"{agent_file.name}: tools field {value!r} uses permission-spec syntax"
+                )
+
+
+def test_permission_log_is_gitignored(tmp_path: Path) -> None:
+    """C7 regression: route-perms log file must be gitignored."""
+    dst = render(tmp_path)
+    gitignore = (dst / ".gitignore").read_text()
+    assert ".claude/permission-requests.log" in gitignore
+
+
+def test_hooks_have_jq_guard(tmp_path: Path) -> None:
+    """C6 regression: each jq-using hook must short-circuit gracefully if jq is absent."""
+    dst = render(tmp_path)
+    hooks_dir = dst / ".claude" / "hooks"
+    for hook_name in (
+        "block-secret-edits.sh",
+        "block-dangerous-bash.sh",
+        "route-perms-to-opus.sh",
+        "tests-before-pr.sh",
+        "warn-on-lockfile-edit.sh",
+    ):
+        content = (hooks_dir / hook_name).read_text()
+        assert "command -v jq" in content, f"{hook_name} missing jq guard"
+
+
+def test_include_superpowers_skills_question_removed(tmp_path: Path) -> None:
+    """C5 regression: dead question must not appear in copier.yml."""
+    copier_yml = (TEMPLATE_ROOT / "copier.yml").read_text()
+    assert "include_superpowers_skills" not in copier_yml
 
 
 def test_settings_deny_list_blocks_sensitive_reads(tmp_path: Path) -> None:
@@ -376,99 +481,117 @@ def test_superpowers_off_does_not_ship_skills(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_boris_defaults_routes_three_tiers(tmp_path: Path) -> None:
-    """Default routing: Opus high, Sonnet mid (session default), Haiku low."""
-    dst = render(tmp_path, model_routing="boris-defaults",
-                 model_high="claude-opus-4-5",
-                 model_mid="claude-sonnet-4-5",
-                 model_low="claude-haiku-4-5")
+def test_latest_routing_uses_three_aliases(tmp_path: Path) -> None:
+    """Default 'latest' routing: opus (high), sonnet (mid, session default), haiku (low)."""
+    dst = render(tmp_path, model_routing="latest",
+                 model_high="opus",
+                 model_mid="sonnet",
+                 model_low="haiku")
     settings = json.loads((dst / ".claude" / "settings.json").read_text())
-    assert settings["model"] == "claude-sonnet-4-5"
+    assert settings["model"] == "sonnet"
 
     # /commit and /techdebt -> low
-    assert "model: claude-haiku-4-5" in (dst / ".claude" / "commands" / "commit.md").read_text()
-    assert "model: claude-haiku-4-5" in (dst / ".claude" / "commands" / "techdebt.md").read_text()
+    assert "model: haiku" in (dst / ".claude" / "commands" / "commit.md").read_text()
+    assert "model: haiku" in (dst / ".claude" / "commands" / "techdebt.md").read_text()
 
     # /review -> mid
-    assert "model: claude-sonnet-4-5" in (dst / ".claude" / "commands" / "review.md").read_text()
+    assert "model: sonnet" in (dst / ".claude" / "commands" / "review.md").read_text()
 
     # /security-review -> high
-    assert "model: claude-opus-4-5" in (dst / ".claude" / "commands" / "security-review.md").read_text()
+    assert "model: opus" in (dst / ".claude" / "commands" / "security-review.md").read_text()
 
     # security-auditor agent -> high
-    assert "model: claude-opus-4-5" in (dst / ".claude" / "agents" / "security-auditor.md").read_text()
+    assert "model: opus" in (dst / ".claude" / "agents" / "security-auditor.md").read_text()
 
 
 def test_sonnet_only_routes_all_to_sonnet(tmp_path: Path) -> None:
-    """sonnet-only: every tier collapses to Sonnet."""
+    """sonnet-only: every tier collapses to the sonnet alias."""
     dst = render(tmp_path, model_routing="sonnet-only",
-                 model_high="claude-sonnet-4-5",
-                 model_mid="claude-sonnet-4-5",
-                 model_low="claude-sonnet-4-5")
+                 model_high="sonnet",
+                 model_mid="sonnet",
+                 model_low="sonnet")
     settings = json.loads((dst / ".claude" / "settings.json").read_text())
-    assert settings["model"] == "claude-sonnet-4-5"
-    # Even /commit (normally Haiku) should be Sonnet
-    assert "model: claude-sonnet-4-5" in (dst / ".claude" / "commands" / "commit.md").read_text()
-    # Even security-auditor (normally Opus) should be Sonnet
-    assert "model: claude-sonnet-4-5" in (dst / ".claude" / "agents" / "security-auditor.md").read_text()
-    assert "claude-opus" not in (dst / ".claude" / "agents" / "security-auditor.md").read_text()
-    assert "claude-haiku" not in (dst / ".claude" / "commands" / "commit.md").read_text()
+    assert settings["model"] == "sonnet"
+    assert "model: sonnet" in (dst / ".claude" / "commands" / "commit.md").read_text()
+    assert "model: sonnet" in (dst / ".claude" / "agents" / "security-auditor.md").read_text()
+    assert "opus" not in (dst / ".claude" / "agents" / "security-auditor.md").read_text()
+    assert "haiku" not in (dst / ".claude" / "commands" / "commit.md").read_text()
 
 
 def test_opus_heavy_routes_high_and_mid_to_opus(tmp_path: Path) -> None:
     dst = render(tmp_path, model_routing="opus-heavy",
-                 model_high="claude-opus-4-5",
-                 model_mid="claude-opus-4-5",
-                 model_low="claude-sonnet-4-5")
+                 model_high="opus",
+                 model_mid="opus",
+                 model_low="sonnet")
     settings = json.loads((dst / ".claude" / "settings.json").read_text())
-    assert settings["model"] == "claude-opus-4-5"
-    # /commit (low) -> Sonnet (Haiku not used in opus-heavy)
-    assert "model: claude-sonnet-4-5" in (dst / ".claude" / "commands" / "commit.md").read_text()
-    # /security-review (high) and /review (mid) both Opus
-    assert "model: claude-opus-4-5" in (dst / ".claude" / "commands" / "security-review.md").read_text()
-    assert "model: claude-opus-4-5" in (dst / ".claude" / "commands" / "review.md").read_text()
+    assert settings["model"] == "opus"
+    # /commit (low) -> sonnet (haiku not used in opus-heavy)
+    assert "model: sonnet" in (dst / ".claude" / "commands" / "commit.md").read_text()
+    # /security-review (high) and /review (mid) both opus
+    assert "model: opus" in (dst / ".claude" / "commands" / "security-review.md").read_text()
+    assert "model: opus" in (dst / ".claude" / "commands" / "review.md").read_text()
 
 
 def test_routing_flows_to_ci_workflows(tmp_path: Path) -> None:
     """CI workflows derive their --model arg from the same tier vars."""
-    dst = render(tmp_path, model_routing="boris-defaults",
-                 model_high="claude-opus-4-5",
-                 model_mid="claude-sonnet-4-5",
-                 model_low="claude-haiku-4-5",
+    dst = render(tmp_path, model_routing="latest",
+                 model_high="opus",
+                 model_mid="sonnet",
+                 model_low="haiku",
                  ci_review=True)
     review_yml = (dst / ".github" / "workflows" / "claude-review.yml").read_text()
     techdebt_yml = (dst / ".github" / "workflows" / "claude-techdebt.yml").read_text()
     # claude-review uses mid, claude-techdebt uses low
-    assert "claude-sonnet-4-5" in review_yml
-    assert "claude-haiku-4-5" in techdebt_yml
+    assert "--model sonnet" in review_yml
+    assert "--model haiku" in techdebt_yml
 
 
 def test_routing_flows_to_perms_hook(tmp_path: Path) -> None:
     """The Opus scanning reference in the perms hook uses model_high."""
-    dst = render(tmp_path, model_routing="boris-defaults",
-                 model_high="claude-opus-4-5",
-                 model_mid="claude-sonnet-4-5",
-                 model_low="claude-haiku-4-5")
+    dst = render(tmp_path, model_routing="latest",
+                 model_high="opus",
+                 model_mid="sonnet",
+                 model_low="haiku")
     hook = (dst / ".claude" / "hooks" / "route-perms-to-opus.sh").read_text()
-    # The (commented-out) Opus scanning block references model_high
-    assert "claude-opus-4-5" in hook
+    # The (commented-out) scanning block references model_high
+    assert "--model opus" in hook
     # And no orphaned Jinja syntax left over
     assert "{{ " not in hook and "{% " not in hook
 
 
 def test_routing_table_appears_in_agents_md(tmp_path: Path) -> None:
-    dst = render(tmp_path, model_routing="boris-defaults",
-                 model_high="claude-opus-4-5",
-                 model_mid="claude-sonnet-4-5",
-                 model_low="claude-haiku-4-5")
+    dst = render(tmp_path, model_routing="latest",
+                 model_high="opus",
+                 model_mid="sonnet",
+                 model_low="haiku")
     agents_md = (dst / "AGENTS.md").read_text()
     assert "## Model routing" in agents_md
-    assert "boris-defaults" in agents_md
-    assert "claude-opus-4-5" in agents_md
-    assert "claude-sonnet-4-5" in agents_md
-    assert "claude-haiku-4-5" in agents_md
+    assert "latest" in agents_md
+    # All three aliases appear in the routing table
+    assert "| `opus` |" in agents_md
+    assert "| `sonnet` |" in agents_md
+    assert "| `haiku` |" in agents_md
     # The three tiers are explicitly named
     assert "high" in agents_md and "mid" in agents_md and "low" in agents_md
+
+
+def test_no_hardcoded_model_ids_anywhere(tmp_path: Path) -> None:
+    """Regression guard: scaffold must use aliases, not pinned model IDs."""
+    dst = render(tmp_path)
+    import re
+    pattern = re.compile(r"claude-(opus|sonnet|haiku)-\d")
+    for path in dst.rglob("*"):
+        if path.is_file() and path.suffix in (".md", ".yml", ".yaml", ".json", ".sh"):
+            content = path.read_text(errors="ignore")
+            match = pattern.search(content)
+            if match:
+                # Allow a single mention as documentation example in AGENTS.md routing section
+                if path.name == "AGENTS.md" and "pin a specific ID" in content:
+                    continue
+                raise AssertionError(
+                    f"Hardcoded model ID {match.group(0)!r} found in "
+                    f"{path.relative_to(dst)} — use an alias instead."
+                )
 
 
 def test_no_orphan_jinja_in_any_rendered_file(tmp_path: Path) -> None:

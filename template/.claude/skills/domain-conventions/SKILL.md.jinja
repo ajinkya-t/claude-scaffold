@@ -1,0 +1,54 @@
+---
+name: domain-conventions
+description: Use when writing or modifying business-logic code in {{ project_name }} to apply project-specific patterns for entities, error handling, observability, and integration boundaries. Skip for pure infrastructure or vendored code.
+---
+
+# Domain conventions for {{ project_name }}
+
+`repo-conventions` covers language-level rules. This skill is for the project's *domain* patterns — naming, error semantics, observability shape, and integration contracts that a fresh contributor wouldn't infer from reading the code.
+
+Update when you've corrected Claude on the same domain rule twice. Keep it short — the longer this gets, the less it gets read.
+
+## Entities and naming
+
+<!-- TODO: List the core domain entities and their conventions.
+     Example for an e-commerce app:
+       - Customer, Order, LineItem, Fulfillment
+       - IDs are ULIDs, prefixed by entity type (e.g., `cus_01H...`).
+       - Money is always cents (int), never floats. Currency is a separate field.
+-->
+
+## Error handling
+
+<!-- TODO: Project-specific error semantics.
+     Example:
+       - Domain errors are typed exceptions in `src/errors.py`.
+       - Surface user-visible errors via `ProblemDetails` (RFC 7807).
+       - Never swallow `IntegrityError`; let the global handler convert it to 409.
+-->
+
+## Observability
+
+<!-- TODO: How this project does logs/metrics/traces.
+     Example:
+       - Structured logs only; no `print()`. Use `logger.info("event_name", **fields)`.
+       - Every external call is traced; span name = `<service>.<operation>`.
+       - PII fields are redacted at serialization time, not log time.
+-->
+
+## Integration boundaries
+
+<!-- TODO: Where the system meets the outside world.
+     Example:
+       - All HTTP clients go through `src/clients/` with retry + timeout configured.
+       - DB access only through repositories; no raw SQL outside `src/db/`.
+       - Webhook handlers idempotency-key by event ID.
+-->
+
+## When to update this file
+
+- A pattern stabilizes that Claude wouldn't infer from a single file read.
+- You've corrected Claude on the same convention twice in one week.
+- A failure mode keeps recurring (and a fix-here check would prevent it).
+
+Don't update for one-offs. Don't write a 500-line domain encyclopedia. The shorter this stays, the more it gets read.

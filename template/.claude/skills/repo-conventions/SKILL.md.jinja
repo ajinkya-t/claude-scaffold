@@ -1,9 +1,6 @@
 ---
 name: repo-conventions
-description: |
-  Conventions specific to {{ project_name }}. Loaded automatically when Claude
-  needs guidance on patterns, naming, layout, or workflows in this repo.
-  Update when you find yourself correcting Claude on the same convention twice.
+description: Use when writing or modifying code in {{ project_name }} to apply this repo's specific patterns, naming, layout, and workflow rules.
 ---
 
 # Repository conventions for {{ project_name }}
@@ -64,7 +61,7 @@ scripts/              # one-off and operational scripts
 
 ## Workflow
 
-- One task per Claude session. Use `claude --worktree <n>` to run multiple in parallel without conflicts.
+- One task per Claude session. For parallel work, create a git worktree (`git worktree add ../{{ project_name }}-<feature> -b feat/<feature>`) and start a fresh Claude session there.
 - `/plan` before non-trivial work. The plan goes through review before any code is written.
 - `/review` before `/commit`. `/techdebt` at end of session.
 - Commits: Conventional Commits, one logical change per commit, no AI attribution.

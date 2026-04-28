@@ -9,9 +9,12 @@
     }') %}
 {%- endif %}
 {%- if 'filesystem' in mcps %}
+{#- Default to source/test/docs directories instead of the entire CWD.
+    Broadens are user-driven: edit .mcp.json after rendering if you need access
+    to vendored deps, scripts, or arbitrary paths. -#}
 {%- set _ = blocks.append('    "filesystem": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "${PWD}"]
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "./src", "./tests", "./docs"]
     }') %}
 {%- endif %}
 {%- if 'postgres' in mcps %}
@@ -29,27 +32,27 @@
 {%- if 'playwright' in mcps %}
 {%- set _ = blocks.append('    "playwright": {
       "command": "npx",
-      "args": ["-y", "@playwright/mcp@latest"]
+      "args": ["-y", "@playwright/mcp@0.23.0"]
     }') %}
 {%- endif %}
 {%- if 'supabase' in mcps %}
 {%- set _ = blocks.append('    "supabase": {
       "command": "npx",
-      "args": ["-y", "@supabase/mcp-server-supabase@latest", "--read-only", "--project-ref", "${SUPABASE_PROJECT_REF}"],
+      "args": ["-y", "@supabase/mcp-server-supabase@0.0.71", "--read-only", "--project-ref", "${SUPABASE_PROJECT_REF}"],
       "env": { "SUPABASE_ACCESS_TOKEN": "${SUPABASE_ACCESS_TOKEN}" }
     }') %}
 {%- endif %}
 {%- if 'ref' in mcps %}
 {%- set _ = blocks.append('    "ref": {
       "command": "npx",
-      "args": ["-y", "ref-tools-mcp@latest"],
+      "args": ["-y", "ref-tools-mcp@3.0.3"],
       "env": { "REF_API_KEY": "${REF_API_KEY}" }
     }') %}
 {%- endif %}
 {%- if 'chrome-devtools' in mcps %}
 {%- set _ = blocks.append('    "chrome-devtools": {
       "command": "npx",
-      "args": ["-y", "chrome-devtools-mcp@latest", "--autoConnect"]
+      "args": ["-y", "chrome-devtools-mcp@0.7.0", "--autoConnect"]
     }') %}
 {%- endif %}
 {{ blocks | join(',\n') }}

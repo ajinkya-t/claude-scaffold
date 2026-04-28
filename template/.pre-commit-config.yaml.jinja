@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -12,34 +12,55 @@ repos:
       - id: check-toml
 
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.18.4
+    rev: v8.30.1
     hooks:
       - id: gitleaks
 {% if language == 'python' %}
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
+    rev: v0.15.12
     hooks:
       - id: ruff
         args: [--fix]
       - id: ruff-format
 {% endif %}{% if language == 'typescript' %}
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v3.1.0
+  # The official pre-commit/mirrors-prettier was archived in late 2024.
+  # rbubley/mirrors-prettier is the maintained successor.
+  - repo: https://github.com/rbubley/mirrors-prettier
+    rev: v3.8.3
     hooks:
       - id: prettier
         types_or: [javascript, jsx, ts, tsx, json, css, scss, html, markdown, yaml]
 {% endif %}{% if language == 'go' %}
-  - repo: https://github.com/dnephin/pre-commit-golang
-    rev: v0.5.1
+  # dnephin/pre-commit-golang is unmaintained; use local hooks against the
+  # toolchain instead. Requires Go installed locally.
+  - repo: local
     hooks:
       - id: go-fmt
-      - id: go-vet-mod
-      - id: go-imports
+        name: go fmt
+        entry: gofmt -l -w
+        language: system
+        types: [go]
+      - id: go-vet
+        name: go vet
+        entry: bash -c 'go vet ./...'
+        language: system
+        types: [go]
+        pass_filenames: false
 {% endif %}{% if language == 'rust' %}
-  - repo: https://github.com/doublify/pre-commit-rust
-    rev: v1.0
+  # doublify/pre-commit-rust is unmaintained; use local hooks instead.
+  # Requires rustup with rustfmt + clippy components installed.
+  - repo: local
     hooks:
-      - id: fmt
-      - id: cargo-check
-      - id: clippy
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --all --
+        language: system
+        types: [rust]
+        pass_filenames: false
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: cargo clippy --all-targets --all-features -- -D warnings
+        language: system
+        types: [rust]
+        pass_filenames: false
 {% endif %}

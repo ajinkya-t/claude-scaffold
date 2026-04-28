@@ -5,7 +5,7 @@
 ```bash
 cd ~/projects/claude-scaffold
 uv venv && uv sync          # or: pip install copier pytest pyyaml
-uv run pytest               # should be 19/19 passing
+uv run pytest               # all template-render tests should pass
 ```
 
 If anything fails, the test output points at the exact file/line.

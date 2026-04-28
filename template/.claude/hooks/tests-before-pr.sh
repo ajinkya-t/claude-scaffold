@@ -1,9 +1,31 @@
 #!/usr/bin/env bash
 # tests-before-pr.sh
-# PreToolUse hook on PR creation tools
+# PreToolUse hook fired on Bash and mcp__github__create_pull_request.
+# Bash hooks fire for every command, so we self-filter to the PR-creation case.
 # Runs the project test suite; exit 2 if it fails.
 
 set -euo pipefail
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "tests-before-pr: jq not installed — skipping (install: brew install jq)" >&2
+  exit 0
+fi
+
+input="$(cat)"
+tool_name="$(echo "$input" | jq -r '.tool_name // empty')"
+bash_command="$(echo "$input" | jq -r '.tool_input.command // empty')"
+
+# Only run when the user is actually creating a PR.
+is_pr_create=0
+if [[ "$tool_name" == "mcp__github__create_pull_request" ]]; then
+  is_pr_create=1
+elif [[ "$tool_name" == "Bash" && "$bash_command" =~ gh[[:space:]]+pr[[:space:]]+create ]]; then
+  is_pr_create=1
+fi
+
+if [[ $is_pr_create -eq 0 ]]; then
+  exit 0
+fi
 
 # Detect test command from project files
 if [[ -f "pyproject.toml" ]] && grep -q "pytest" pyproject.toml 2>/dev/null; then
@@ -31,9 +53,19 @@ else
   exit 0
 fi
 
-echo "tests-before-pr: running '$test_cmd'..." >&2
+timeout_secs="${CLAUDE_TESTS_TIMEOUT:-300}"
+echo "tests-before-pr: running '$test_cmd' (timeout ${timeout_secs}s)..." >&2
 
-if ! eval "$test_cmd" >&2; then
+# Use `timeout` if available (GNU coreutils on Linux, brew coreutils on macOS as gtimeout).
+if command -v timeout >/dev/null 2>&1; then
+  runner="timeout ${timeout_secs}"
+elif command -v gtimeout >/dev/null 2>&1; then
+  runner="gtimeout ${timeout_secs}"
+else
+  runner=""
+fi
+
+if ! $runner bash -c "$test_cmd" >&2; then
   echo "" >&2
   echo "BLOCKED: tests failed. Fix them before opening the PR." >&2
   echo "Override: set CLAUDE_SKIP_TESTS=1 (use sparingly)." >&2

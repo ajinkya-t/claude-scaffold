@@ -2,8 +2,6 @@
 
 A pragmatic Claude Code harness for production-grade work. Distilled from Anthropic's official guidance, Boris Cherny's threads, and 2026 practitioner consensus.
 
-Stress-tested against the [v2 blueprint](./docs/blueprint.md) (Boris Cherny on worktrees, Ran Isenberg on BMAD, Simon Willison on verification-first, Armin Ronacher on MCP minimalism, Anthropic's hooks reference).
-
 ## What you get
 
 - Terse `CLAUDE.md` / `AGENTS.md` (~35 lines, vendor-neutral)
@@ -62,4 +60,6 @@ MIT
 
 ## References
 
-The blueprint this scaffold implements is at `docs/blueprint.md`. Primary sources cited there.
+- Anthropic Claude Code best practices: https://code.claude.com/docs/en/best-practices
+- Hooks reference: https://code.claude.com/docs/en/hooks
+- Boris Cherny's tips: https://howborisusesclaudecode.com

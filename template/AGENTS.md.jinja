@@ -22,7 +22,7 @@
 - `.claude/` agent harness — see `.claude/skills/repo-conventions/` for details
 
 ## Workflow
-- One chat per task. Prefer `claude --worktree <name>` for parallel work.
+- One chat per task. For parallel work: `git worktree add ../{{ project_name }}-<feature> -b feat/<feature> && cd ../{{ project_name }}-<feature> && claude`.{% if enable_superpowers %} (Or invoke the `superpowers:using-git-worktrees` skill, which automates this.){% endif %}
 {%- if enable_superpowers %}
 - Brainstorming, planning, TDD, debugging, and code review are handled by the Superpowers plugin's auto-triggered skills (`brainstorming`, `writing-plans`, `subagent-driven-development`, `test-driven-development`, `systematic-debugging`, `superpowers:code-reviewer`). Don't use Claude's native plan mode — Superpowers intercepts it.
 - After implementation: `/review-with-superpowers` (delegates to `superpowers:code-reviewer` + the project's `security-auditor`), then `/security-review`, `/commit`, and `/techdebt` at end of session.
@@ -66,7 +66,7 @@ Routing strategy: `{{ model_routing }}`
 | mid (default) | `{{ model_mid }}` | session default, `/review`{% if enable_superpowers %}, `/review-with-superpowers`{% endif %}, ad-hoc work |
 | low | `{{ model_low }}` | `/commit`, `/techdebt`, mechanical/formatting tasks |
 
-To change routing later: edit `model_routing` in `.copier-answers.yml` and re-run `copier update`. Or override per-command by editing the `model:` line in the relevant `.claude/commands/*.md` or `.claude/agents/*.md` file.
+These are Claude Code model **aliases** — they auto-resolve to the current stable version of each family, so the harness doesn't need a bump every time a new model ships. If you need reproducibility (e.g., a long-running CI job that must not drift), pin a specific ID instead — replace the alias with `claude-opus-4-7`, `claude-sonnet-4-6`, etc., either in `.copier-answers.yml` (re-run `copier update`) or directly in the `model:` line of the relevant `.claude/commands/*.md` / `.claude/agents/*.md` / `.claude/settings.json` file.
 
 ## Boundaries
 **Always**: tests pass before declaring done; new code paths get tests; follow existing patterns.

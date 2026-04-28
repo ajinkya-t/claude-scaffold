@@ -22,7 +22,8 @@ build/
 {% elif language == 'rust' -%}
 # Rust
 target/
-Cargo.lock
+# Cargo.lock — committed for binaries (default), uncomment for libraries:
+# Cargo.lock
 {% elif language == 'go' -%}
 # Go
 bin/
@@ -44,4 +45,5 @@ bin/
 .claude/.credentials.json
 .claude/cache/
 .claude/worktrees/
+.claude/permission-requests.log
 CLAUDE.local.md

@@ -7,6 +7,9 @@ _skip_if_exists:
   - ".gitignore"
   - "README.md"
   - ".pre-commit-config.yaml"
+  - ".mcp.json"
+  - ".claude/settings.json"
+  - "LICENSE"
 
 _tasks:
   # When Superpowers is on, drop the redundant commands and subagents.
@@ -15,7 +18,7 @@ _tasks:
   - "{% if enable_superpowers %}rm -f .claude/commands/plan.md .claude/commands/tdd.md .claude/commands/review.md .claude/agents/code-reviewer.md .claude/agents/test-writer.md .claude/agents/debugger.md{% endif %}"
   # When Superpowers is off, drop the integration skills and shim.
   - "{% if not enable_superpowers %}rm -rf .claude/skills/design-review .claude/skills/spec-security-review .claude/commands/review-with-superpowers.md{% endif %}"
-  - "{% if git_init %}git init -q && git add -A && git commit -q -m 'chore: scaffold from claude-scaffold' || true{% endif %}"
+  - "{% if git_init %}command -v git >/dev/null 2>&1 || { echo 'git not installed; skipping git_init'; exit 0; }; git init -q && git add -A && git commit -q -m 'chore: scaffold from claude-scaffold'{% endif %}"
   - "{% if pre_commit %}pre-commit install -q 2>/dev/null || echo 'pre-commit not installed; run: uvx pre-commit install'{% endif %}"
 
 # ---------------------------------------------------------------------------
@@ -25,7 +28,7 @@ _tasks:
 project_name:
   type: str
   help: Project name (kebab-case)
-  validator: "{% if not (project_name | regex_search('^[a-z][a-z0-9-]*$')) %}Must be lowercase kebab-case{% endif %}"
+  validator: "{% if not (project_name | regex_search('^[a-z][a-z0-9]*(-[a-z0-9]+)*$')) %}Must be lowercase kebab-case (no leading/trailing/double hyphens){% endif %}"
 
 project_description:
   type: str
@@ -85,11 +88,9 @@ agents_file_strategy:
     AGENTS.md is vendor-neutral (Codex, Cursor, Aider read it too).
     'agents-md-symlink' = AGENTS.md is canonical, CLAUDE.md is a 2-line @import. RECOMMENDED.
     'claude-md' = CLAUDE.md only. Vendor-locked.
-    'both' = Two files, manually kept in sync. Not recommended.
   choices:
     - agents-md-symlink
     - claude-md
-    - both
   default: agents-md-symlink
 
 # ---------------------------------------------------------------------------
@@ -126,18 +127,21 @@ chrome_extension:
 
 hooks:
   type: str
-  help: "Hooks to install (default: all four)"
+  help: "Hooks to install (default: all four core hooks)"
   default:
     - block-secret-edits
     - block-dangerous-bash
     - tests-before-pr
     - route-perms-to-opus
+    - warn-on-lockfile-edit
   multiselect: true
   choices:
     - block-secret-edits
     - block-dangerous-bash
     - tests-before-pr
     - route-perms-to-opus
+    - warn-on-lockfile-edit
+    - notify-on-stop
 
 # ---------------------------------------------------------------------------
 # Subagents
@@ -174,7 +178,7 @@ output_style:
 # ---------------------------------------------------------------------------
 # Model routing
 #
-# Three task tiers mapped to three model strings. Every command, agent, hook,
+# Three task tiers mapped to three model aliases. Every command, agent, hook,
 # and CI workflow that pins a model derives it from these three variables,
 # so changing the routing in one place flows everywhere.
 #
@@ -182,48 +186,47 @@ output_style:
 #   high — architecture, security review, permission-hook scanning
 #   mid  — plan, iterate, refactor, code review, default for ad-hoc sessions
 #   low  — /commit, /techdebt, mechanical formatting/cleanup
+#
+# Defaults use Claude Code's model aliases ('opus', 'sonnet', 'haiku'), which
+# auto-resolve to the latest stable version of each family. If you need
+# reproducibility (e.g., a long-running CI job whose behavior must not drift
+# when a new model lands), pin a specific ID instead — e.g., set model_high
+# to 'claude-opus-4-7' after rendering. Aliases are recommended for most
+# users because they avoid forced version bumps.
 # ---------------------------------------------------------------------------
 
 model_routing:
   type: str
   help: |
-    'boris-defaults' = Opus 4.5 (high), Sonnet 4.5 (mid), Haiku 4.5 (low)
-    'sonnet-only'    = Sonnet 4.5 for all three tiers (single-model setup)
-    'opus-heavy'     = Opus 4.5 (high+mid), Sonnet 4.5 (low) — bias toward depth
+    'latest'      = opus (high), sonnet (mid), haiku (low) — tracks current stable
+    'sonnet-only' = sonnet for all three tiers (single-model setup)
+    'opus-heavy'  = opus (high+mid), sonnet (low) — bias toward depth
   choices:
-    - boris-defaults
+    - latest
     - sonnet-only
     - opus-heavy
-  default: boris-defaults
+  default: latest
 
-# Tier -> model string. Computed from model_routing; the rest of the template
+# Tier -> model alias. Computed from model_routing; the rest of the template
 # only references model_high, model_mid, model_low.
 model_high:
   type: str
   when: false
-  default: "{% if model_routing == 'boris-defaults' or model_routing == 'opus-heavy' %}claude-opus-4-5{% else %}claude-sonnet-4-5{% endif %}"
+  default: "{% if model_routing == 'latest' or model_routing == 'opus-heavy' %}opus{% else %}sonnet{% endif %}"
 
 model_mid:
   type: str
   when: false
-  default: "{% if model_routing == 'opus-heavy' %}claude-opus-4-5{% else %}claude-sonnet-4-5{% endif %}"
+  default: "{% if model_routing == 'opus-heavy' %}opus{% else %}sonnet{% endif %}"
 
 model_low:
   type: str
   when: false
-  default: "{% if model_routing == 'boris-defaults' %}claude-haiku-4-5{% else %}claude-sonnet-4-5{% endif %}"
+  default: "{% if model_routing == 'latest' %}haiku{% else %}sonnet{% endif %}"
 
 # ---------------------------------------------------------------------------
 # Methodology layers (opt-in)
 # ---------------------------------------------------------------------------
-
-include_superpowers_skills:
-  type: bool
-  help: |
-    Cherry-pick 2-3 Superpowers skills (verification-before-completion, systematic-debugging, writing-plans)
-    into the scaffold. Use this if you want SOME Superpowers methodology without installing the full plugin.
-    If you've already installed the full plugin, leave this false and set enable_superpowers=true below.
-  default: false
 
 enable_superpowers:
   type: bool
