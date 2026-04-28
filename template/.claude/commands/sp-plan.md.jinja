@@ -1,0 +1,9 @@
+---
+description: Write an implementation plan (Opus). Wraps {{ sp_prefix }}:writing-plans with the high tier pinned.
+argument-hint: <task or design-doc path>
+model: {{ model_high }}
+---
+
+Task: $ARGUMENTS
+
+Invoke the `{{ sp_prefix }}:writing-plans` skill and follow it exactly. Opus tier — plans require architectural judgment about ordering, dependencies, and bite-size decomposition; under-pinning here cascades into every downstream task.

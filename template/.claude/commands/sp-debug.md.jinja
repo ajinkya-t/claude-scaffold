@@ -1,0 +1,9 @@
+---
+description: Systematic debug (Opus). Wraps {{ sp_prefix }}:systematic-debugging with the high tier pinned.
+argument-hint: <symptom or failing test>
+model: {{ model_high }}
+---
+
+Symptom: $ARGUMENTS
+
+Invoke the `{{ sp_prefix }}:systematic-debugging` skill and follow it exactly. Opus tier — hypothesis formation is the bottleneck; cheap models guess, capable models reason about the cause.

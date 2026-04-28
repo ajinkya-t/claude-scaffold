@@ -1,0 +1,9 @@
+---
+description: Respond to review feedback with technical rigor (Sonnet). Wraps {{ sp_prefix }}:receiving-code-review.
+argument-hint: <review comments or PR URL>
+model: {{ model_mid }}
+---
+
+Feedback: $ARGUMENTS
+
+Invoke the `{{ sp_prefix }}:receiving-code-review` skill and follow it exactly. Sonnet tier — the skill enforces verify-before-implement; the model evaluates each comment against the actual code.

@@ -72,16 +72,17 @@ uvx copier update --trust
 
 | Component | Count |
 |---|---|
-| Slash commands (`/plan`, `/review`, `/commit`, `/tdd`, `/techdebt`, `/security-review`) | 6 |
-| Subagents (`code-reviewer`, `test-writer`, `debugger`, `security-auditor`) | 4 |
-| Hooks (secret blocking, dangerous-bash blocking, tests-before-PR, perm routing) | 4 |
+| Slash commands (vanilla: `/plan` `/review` `/commit` `/tdd` `/techdebt` `/security-review` `/worktree`) | 7 |
+| Slash commands (+superpowers: `/brainstorm` `/sp-plan` `/sp-debug` `/sp-skill` on Opus; `/sp-tdd` `/sp-implement` `/sp-subagent` `/sp-worktree` `/sp-review-request` `/sp-review-receive` `/sp-finish` `/sp-verify` `/review-with-superpowers` on Sonnet) | +13 |
+| Subagents (`code-reviewer`, `test-writer`, `debugger`, `security-auditor`) — model-pinned | 4 |
+| Hooks (secret blocking, dangerous-bash blocking, tests-before-PR, perm routing, lockfile warn, spec-review-trigger) | 6 |
 | Output styles | 1 (`concise`) |
-| Skills | 1 (`repo-conventions`) |
+| Skills (vanilla: `repo-conventions`, `domain-conventions`; +superpowers: `routing`, `design-review`, `spec-security-review`) | 2 base + 3 sp |
 | CI workflows (`claude-review`, `claude-techdebt`) | 2 |
 | MCP servers (default: github + filesystem; opt-in: postgres, sqlite, playwright, supabase, ref, chrome-devtools) | 2 default + 6 opt-in |
 | Pre-commit config (per-language: ruff/prettier/gofmt/cargo + gitleaks) | 1 |
 
-Total: 35 files in the template repo, 27 in the rendered project.
+When `enable_superpowers=true`: AGENTS.md stays under 25 lines (procedural guidance moved to `routing` skill + `spec-review-trigger.sh` hook), and Sonnet sessions get the 1M-context beta header automatically when `model_mid` resolves to sonnet.
 
 ## Things to customize on day 1
 
@@ -111,28 +112,43 @@ These are personal/local and never go in git (the rendered `.gitignore` already 
 
 ## Using with the Superpowers plugin
 
-If you set `enable_superpowers=true` during `copier copy`, the scaffold:
+If you set `enable_superpowers=true` during `copier copy`, choose a `superpowers_source`:
 
-- Drops `/plan`, `/review`, `/tdd` commands (replaced by Superpowers' auto-triggered skills)
-- Drops `code-reviewer`, `test-writer`, `debugger` subagents (replaced by Superpowers equivalents)
-- Adds `/review-with-superpowers` (delegates to `superpowers:code-reviewer` + your `security-auditor`)
-- Adds two project-level skills: `design-review` and `spec-security-review`
-- Adds a USER-LEVEL INSTRUCTIONS section to AGENTS.md telling Superpowers to invoke both skills during the brainstorming User-Review-Gate
+- **`pcvelz` (default, recommended)** — `pcvelz/superpowers` fork with native Claude Code task management (TaskCreate w/ structured `json:metadata`, dependency enforcement, pre-commit task gate, cross-session resume). Skill prefix: `superpowers-extended-cc:`.
+- **`obra`** — upstream `obra/superpowers`, cross-platform (CC/Codex/OpenCode/Gemini). Skill prefix: `superpowers:`.
 
-The integration solves the known issue where Superpowers' brainstorming skill explicitly blocks `frontend-design` and other implementation skills via a `<HARD-GATE>`. The two project skills run inside the User-Review-Gate window (after design approval, before `writing-plans`), which is *outside* the gate's blocking scope, and `frontend-design` is invoked indirectly via `design-review` only when UI is in scope.
+Install the chosen source:
 
-To install Superpowers:
 ```bash
+# pcvelz (default)
+/plugin marketplace add pcvelz/superpowers
+/plugin install superpowers-extended-cc@superpowers-extended-cc-marketplace
+
+# obra
 /plugin marketplace add obra/superpowers-marketplace
 /plugin install superpowers@superpowers-marketplace
 ```
 
-Or via the official Anthropic marketplace:
-```bash
-/plugin install superpowers@claude-plugins-official
-```
+What the scaffold ships when superpowers is enabled:
 
-Don't install both. Don't install the full `obra/superpowers-marketplace` bundle if you want to avoid Context7 — use the official Anthropic marketplace install instead.
+- Drops `/plan`, `/tdd`, `/review` and the `code-reviewer`/`test-writer`/`debugger` subagents (Superpowers replaces them).
+- Adds `/review-with-superpowers` and 12 tier-pinned slash shims (4 Opus + 8 Sonnet) that wrap the per-skill invocations with the right `model:` frontmatter — the only mechanism to get a specific model on a Superpowers skill.
+- Adds three skills: `routing` (model tier reference), `design-review`, `spec-security-review`.
+- Adds the `spec-review-trigger.sh` PostToolUse hook — fires the moment a design doc is saved at `docs/superpowers/specs/*-design.md`, injecting a system reminder to invoke `design-review` (and `spec-security-review` when security keywords are detected). Replaces ~17 lines of always-loaded AGENTS.md prose.
+- Appends Claude Code's `[1m]` alias suffix on Opus/Sonnet tiers (e.g. `sonnet[1m]`, `opus[1m]`) — the canonical way to enable the 1M context window per `code.claude.com/docs/en/model-config`. Haiku has no 1M variant; the suffix is omitted on the low tier when it resolves to haiku. Disable per project with `enable_1m_context=false` in copier answers, or globally at runtime with `CLAUDE_CODE_DISABLE_1M_CONTEXT=1`.
+
+The integration solves the issue where Superpowers' brainstorming skill `<HARD-GATE>` blocks implementation skills like `frontend-design`: the project skills run inside the User-Review-Gate window (after design approval, before `writing-plans`), which is *outside* the gate's blocking scope, and `frontend-design` is invoked indirectly via `design-review` only when UI is in scope.
+
+### pcvelz-specific: required and optional config
+
+When `superpowers_source=pcvelz`, the scaffold automatically adds `"EnterPlanMode"` to `.claude/settings.json` `permissions.deny` — the fork's brainstorming + writing-plans skills require normal mode and the README explicitly calls this out as recommended config.
+
+Two opt-in hooks ship inside the pcvelz plugin (not auto-wired by this scaffold — they reference the plugin's install dir). Add to `.claude/settings.local.json` if you want them:
+
+- **`pre-commit-check-tasks.sh`** — `PreToolUse` on `Bash`. Blocks `git commit` while a native task is `in_progress`. Pending tasks pass through, so per-task commit flows still work.
+- **`stop-deflection-guard.sh`** — `Stop` event. Blocks "fresh session later" / "context is full" deflections when real context usage is below 50%.
+
+Both live at `~/.claude/plugins/marketplaces/superpowers-extended-cc-marketplace/hooks/examples/`. See the script headers for configuration env vars.
 
 ## References
 

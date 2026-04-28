@@ -1,0 +1,9 @@
+---
+description: Create an isolated worktree with project setup verified (Sonnet). Wraps {{ sp_prefix }}:using-git-worktrees.
+argument-hint: <feature-name>
+model: {{ model_mid }}
+---
+
+Feature: $ARGUMENTS
+
+Invoke the `{{ sp_prefix }}:using-git-worktrees` skill and follow it exactly. Unlike `/worktree` (vanilla `git worktree add`), this skill also runs project setup, verifies a clean test baseline, and dispatches the next workflow step. Sonnet tier with 1M context.

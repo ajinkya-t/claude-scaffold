@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# spec-review-trigger.sh
+# PostToolUse hook (Edit|Write|MultiEdit)
+#
+# When a Superpowers design doc is written, inject a system reminder so the
+# project's design-review (and conditionally spec-security-review) skills fire
+# during the User-Review-Gate window. Replaces ~17 lines of always-loaded
+# AGENTS.md prose with an event-triggered nudge.
+
+set -euo pipefail
+
+if ! command -v jq >/dev/null 2>&1; then
+  exit 0
+fi
+
+input="$(cat)"
+file_path="$(echo "$input" | jq -r '.tool_input.file_path // ""')"
+
+# Match `docs/superpowers/specs/*-design.md` (anywhere under repo root).
+if [[ ! "$file_path" =~ docs/superpowers/specs/.*-design\.md$ ]]; then
+  exit 0
+fi
+
+# Read the file we just wrote and decide whether security review is also relevant.
+security_keywords='auth|login|password|token|jwt|oauth|secret|api[ _-]?key|credential|encrypt|hash|user[ _-]?input|upload|parse|deserialize|webhook|external[ _-]?api|third[ _-]?party|database|sql|query|pii|prompt|llm|agent|tool[ _-]?call|mcp'
+security_match=""
+if [[ -f "$file_path" ]]; then
+  if grep -qiE "$security_keywords" "$file_path" 2>/dev/null; then
+    security_match="yes"
+  fi
+fi
+
+reminder="Design doc saved at ${file_path}. Per project policy, before continuing to writing-plans:"
+reminder="${reminder} (1) invoke the \`design-review\` skill"
+if [[ "$security_match" == "yes" ]]; then
+  reminder="${reminder}; (2) security-relevant keywords detected — also invoke \`spec-security-review\`"
+  gate_subject="Both skills end"
+else
+  gate_subject="The skill ends"
+fi
+reminder="${reminder}. ${gate_subject} with a 'revise / proceed' gate; only on 'proceed' continue to \`{{ sp_prefix }}:writing-plans\`."
+
+jq -n --arg msg "$reminder" '{
+  hookSpecificOutput: {
+    hookEventName: "PostToolUse",
+    additionalContext: $msg
+  }
+}'

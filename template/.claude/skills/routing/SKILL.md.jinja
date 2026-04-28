@@ -1,0 +1,53 @@
+---
+name: routing
+description: Use when asked which model is being used for X, when planning to invoke a Superpowers skill at a specific tier, or when configuring/auditing the model routing for this project.
+---
+
+# Model routing for {{ project_name }}
+
+Three tiers, applied via `model:` frontmatter on commands and agents. Skills inherit the session model unless invoked through a tier-pinning slash shim.
+
+| Surface | Tier | Model |
+|---|---|---|
+| session default | mid | `{{ model_mid }}` |
+| `/security-review`, `security-auditor` agent | high | `{{ model_high }}` |
+| `debugger` agent | high | `{{ model_high }}` |
+| `/review`{% if enable_superpowers %}, `/review-with-superpowers`{% endif %} | mid | `{{ model_mid }}` |
+| `code-reviewer`, `test-writer` agents | mid | `{{ model_mid }}` |
+| `/commit`, `/techdebt` | low | `{{ model_low }}` |
+{%- if enable_superpowers %}
+| `/brainstorm` `/sp-plan` `/sp-debug` `/sp-skill` | high | `{{ model_high }}` |
+| `/sp-tdd` `/sp-implement` `/sp-subagent` `/sp-worktree` | mid | `{{ model_mid }}` |
+| `/sp-review-request` `/sp-review-receive` `/sp-finish` `/sp-verify` | mid | `{{ model_mid }}` |
+| `{{ sp_prefix }}:*` skills (auto-fired) | inherits session | invoke via shim above for explicit tier |
+{%- endif %}
+
+## Why this mapping
+
+- **High (Opus)**: deep reasoning, hypothesis formation, architectural judgment, security threat modeling. Cost is justified when the alternative is silent wrong-answer drift.
+- **Mid (Sonnet)**: balanced execution. Following plans, writing tests, mechanical refactors, code review. Default for ad-hoc work.
+- **Low (Haiku)**: deterministic mechanical tasks where structure dominates judgment. Conventional Commits, dead-code sweeps, format-only edits.
+
+## 1M context window
+{% if enable_1m_context %}
+This project uses Claude Code's `[1m]` alias suffix on Opus/Sonnet tiers (e.g. `model_mid` = `{{ model_mid }}`). Per Claude Code docs (model-config#extended-context), `opus[1m]` and `sonnet[1m]` enable the 1M-token context window; Haiku has no 1M variant and the suffix is omitted automatically. Pricing: standard per-token rates beyond 200K — no premium. On Pro/Max subscriptions, Sonnet 1M may consume 'extra usage' quota.
+
+To override at runtime without re-rendering the scaffold:
+- Set `CLAUDE_CODE_DISABLE_1M_CONTEXT=1` in your env to drop 1M variants from the model picker.
+- Or `/model sonnet` (without the `[1m]`) to switch the live session to the 200K alias.
+{%- else %}
+This project does **not** enable 1M context. To enable, re-render with `enable_1m_context=true` in `.copier-answers.yml`, or pin specific commands/agents to `{{ model_mid }}[1m]` / `{{ model_high }}[1m]` directly. Do not use `[1m]` on Haiku — it has no 1M variant.
+{%- endif %}
+
+## Aliases vs pinned IDs
+
+The frontmatter values above use Claude Code **aliases** (`opus`, `sonnet`, `haiku`) which auto-resolve to the current stable release of each family. For reproducibility (e.g., long-running CI that must not drift across model bumps), replace each alias with a specific ID — `claude-opus-4-7`, `claude-sonnet-4-6`, `claude-haiku-4-5-20251001` — either in `.copier-answers.yml` (re-run `copier update`) or directly in the `model:` line of the relevant `.claude/commands/*.md` / `.claude/agents/*.md` / `.claude/settings.json`.
+
+## Changing routing in one place
+
+The three values are derived from `model_routing` in `.copier-answers.yml`:
+- `latest` → opus / sonnet / haiku (default)
+- `sonnet-only` → sonnet across all three tiers
+- `opus-heavy` → opus / opus / sonnet
+
+Re-run `copier update` after editing.

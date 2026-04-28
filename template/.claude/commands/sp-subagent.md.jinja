@@ -1,0 +1,9 @@
+---
+description: Subagent-driven dev with two-stage review per task (Sonnet). Wraps {{ sp_prefix }}:subagent-driven-development.
+argument-hint: <plan path>
+model: {{ model_mid }}
+---
+
+Plan: $ARGUMENTS
+
+Invoke the `{{ sp_prefix }}:subagent-driven-development` skill and follow it exactly. Sonnet tier with 1M context for the controller. The skill itself dispatches per-task subagents and may escalate individual subagents to a more capable model per its Model Selection guidance.

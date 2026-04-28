@@ -16,8 +16,8 @@ _tasks:
   # /plan and /tdd ship as plain .md (no model interpolation needed).
   # /review and code-reviewer/test-writer/debugger ship as .md after Jinja stripping.
   - "{% if enable_superpowers %}rm -f .claude/commands/plan.md .claude/commands/tdd.md .claude/commands/review.md .claude/agents/code-reviewer.md .claude/agents/test-writer.md .claude/agents/debugger.md{% endif %}"
-  # When Superpowers is off, drop the integration skills and shim.
-  - "{% if not enable_superpowers %}rm -rf .claude/skills/design-review .claude/skills/spec-security-review .claude/commands/review-with-superpowers.md{% endif %}"
+  # When Superpowers is off, drop the integration skills, the routing skill, the spec-review hook, and all 12 tier-pinned shims.
+  - "{% if not enable_superpowers %}rm -rf .claude/skills/design-review .claude/skills/spec-security-review .claude/skills/routing .claude/commands/review-with-superpowers.md .claude/commands/brainstorm.md .claude/commands/sp-plan.md .claude/commands/sp-debug.md .claude/commands/sp-skill.md .claude/commands/sp-worktree.md .claude/commands/sp-implement.md .claude/commands/sp-subagent.md .claude/commands/sp-tdd.md .claude/commands/sp-review-request.md .claude/commands/sp-review-receive.md .claude/commands/sp-finish.md .claude/commands/sp-verify.md .claude/hooks/spec-review-trigger.sh{% endif %}"
   - "{% if git_init %}command -v git >/dev/null 2>&1 || { echo 'git not installed; skipping git_init'; exit 0; }; git init -q && git add -A && git commit -q -m 'chore: scaffold from claude-scaffold'{% endif %}"
   - "{% if pre_commit %}pre-commit install -q 2>/dev/null || echo 'pre-commit not installed; run: uvx pre-commit install'{% endif %}"
 
@@ -127,13 +127,14 @@ chrome_extension:
 
 hooks:
   type: str
-  help: "Hooks to install (default: all four core hooks)"
+  help: "Hooks to install (default: core five + spec-review-trigger when superpowers on)"
   default:
     - block-secret-edits
     - block-dangerous-bash
     - tests-before-pr
     - route-perms-to-opus
     - warn-on-lockfile-edit
+    - spec-review-trigger
   multiselect: true
   choices:
     - block-secret-edits
@@ -141,6 +142,7 @@ hooks:
     - tests-before-pr
     - route-perms-to-opus
     - warn-on-lockfile-edit
+    - spec-review-trigger
     - notify-on-stop
 
 # ---------------------------------------------------------------------------
@@ -207,22 +209,34 @@ model_routing:
     - opus-heavy
   default: latest
 
+enable_1m_context:
+  type: bool
+  help: |
+    Append the `[1m]` alias suffix to Opus and Sonnet tiers (Haiku has no 1M).
+    The `[1m]` alias is Claude Code's canonical way to request the 1M-token context
+    window on Opus 4.6+/4.7 and Sonnet 4.6 (per docs: model-config#extended-context).
+    Pricing: standard rates beyond 200K (no per-token premium). Subscription plans
+    (Pro/Max) may meter Sonnet 1M as 'extra usage' quota. Override at runtime with
+    CLAUDE_CODE_DISABLE_1M_CONTEXT=1.
+  default: true
+
 # Tier -> model alias. Computed from model_routing; the rest of the template
 # only references model_high, model_mid, model_low.
 model_high:
   type: str
   when: false
-  default: "{% if model_routing == 'latest' or model_routing == 'opus-heavy' %}opus{% else %}sonnet{% endif %}"
+  default: "{% if model_routing == 'latest' or model_routing == 'opus-heavy' %}opus{% else %}sonnet{% endif %}{% if enable_1m_context %}[1m]{% endif %}"
 
 model_mid:
   type: str
   when: false
-  default: "{% if model_routing == 'opus-heavy' %}opus{% else %}sonnet{% endif %}"
+  default: "{% if model_routing == 'opus-heavy' %}opus{% else %}sonnet{% endif %}{% if enable_1m_context %}[1m]{% endif %}"
 
+# Haiku does not support 1M context — no [1m] suffix when low resolves to haiku.
 model_low:
   type: str
   when: false
-  default: "{% if model_routing == 'latest' %}haiku{% else %}sonnet{% endif %}"
+  default: "{% if model_routing == 'latest' %}haiku{% else %}sonnet{% if enable_1m_context %}[1m]{% endif %}{% endif %}"
 
 # ---------------------------------------------------------------------------
 # Methodology layers (opt-in)
@@ -231,13 +245,45 @@ model_low:
 enable_superpowers:
   type: bool
   help: |
-    True if you have installed the full obra/superpowers plugin via the marketplace
-    (/plugin install superpowers@claude-plugins-official).
-    When true: the scaffold drops commands and subagents that overlap with Superpowers
-    (plan, tdd, review, code-reviewer, test-writer, debugger), and ships the
-    design-review and spec-security-review skills that integrate with the
-    Superpowers brainstorming -> writing-plans flow.
+    True if you have installed a Superpowers plugin (see superpowers_source).
+    When true: drops commands/subagents that overlap with Superpowers (plan, tdd,
+    review, code-reviewer, test-writer, debugger), ships design-review and
+    spec-security-review skills, the spec-review-trigger hook, the routing skill,
+    and 12 tier-pinned slash shims for the most-used Superpowers skills.
   default: false
+
+superpowers_source:
+  type: str
+  help: |
+    Which Superpowers plugin to install/integrate with.
+    'pcvelz' (recommended) = pcvelz/superpowers — fork with native Claude Code task
+      management (TaskCreate w/ json:metadata, dependency enforcement,
+      pre-commit task gate, cross-session resume). Skill prefix is
+      `superpowers-extended-cc:`.
+    'obra' = obra/superpowers — upstream, cross-platform (CC/Codex/OpenCode/Gemini).
+      Skill prefix is `superpowers:`.
+  choices:
+    - pcvelz
+    - obra
+  default: pcvelz
+  when: "{{ enable_superpowers }}"
+
+# Computed: prefix used inside slash shims and hook reminders.
+sp_prefix:
+  type: str
+  when: false
+  default: "{% if superpowers_source == 'obra' %}superpowers{% else %}superpowers-extended-cc{% endif %}"
+
+# Computed: install snippet shown in README.
+sp_install_url:
+  type: str
+  when: false
+  default: "{% if superpowers_source == 'obra' %}obra/superpowers-marketplace{% else %}pcvelz/superpowers{% endif %}"
+
+sp_install_target:
+  type: str
+  when: false
+  default: "{% if superpowers_source == 'obra' %}superpowers@superpowers-marketplace{% else %}superpowers-extended-cc@superpowers-extended-cc-marketplace{% endif %}"
 
 enable_bmad:
   type: bool

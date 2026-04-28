@@ -1,0 +1,9 @@
+---
+description: Execute a plan in batches with checkpoints (Sonnet). Wraps {{ sp_prefix }}:executing-plans.
+argument-hint: <plan path>
+model: {{ model_mid }}
+---
+
+Plan: $ARGUMENTS
+
+Invoke the `{{ sp_prefix }}:executing-plans` skill and follow it exactly. Sonnet tier with 1M context — plans are pre-decomposed into bite-sized tasks; execution is mechanical and benefits from headroom for the full plan + relevant code in context.

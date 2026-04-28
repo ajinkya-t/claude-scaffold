@@ -38,14 +38,33 @@ This project uses a Claude Code harness scaffolded from [claude-scaffold](https:
 
 Key conventions:
 - One chat per task; for parallel work, create a `git worktree` and start a fresh Claude session there
+{%- if enable_superpowers %}
+- Superpowers skills auto-fire. Tier-pinned slash shims in `.claude/commands/` (`/brainstorm`, `/sp-plan`, `/sp-debug`, `/sp-skill` on Opus; `/sp-tdd`, `/sp-implement`, `/sp-subagent`, `/sp-worktree`, `/sp-review-request`, `/sp-review-receive`, `/sp-finish`, `/sp-verify` on Sonnet w/ 1M ctx).
+- After implementation: `/review-with-superpowers` → `/security-review` → `/commit` → `/techdebt`
+{%- else %}
 - `/plan` before non-trivial work, `/review` before `/commit`, `/techdebt` at end of session
-- Agent instructions live in `AGENTS.md` (vendor-neutral, read by Codex/Cursor/Aider too)
+{%- endif %}
+- Agent instructions live in `AGENTS.md` (vendor-neutral, read by Codex/Cursor/Aider too). It is intentionally terse — every line is injected with every prompt. Detailed routing/conventions live in on-demand skills under `.claude/skills/`.
+- Personal overrides → `CLAUDE.local.md` (gitignored). Library docs → use WebFetch on demand; don't guess current APIs.
 - Settings, hooks, subagents, and skills in `.claude/`
 {%- if chrome_extension %}
 - Frontend work: install the Claude in Chrome extension for live-page verification
 {%- endif %}
 {%- if enable_bmad %}
 - For substantial features: consider BMAD Method for spec-first elicitation (https://github.com/bmad-code-org/BMAD-METHOD)
+{%- endif %}
+{%- if enable_superpowers %}
+
+## Superpowers plugin
+
+This scaffold is integrated with **{{ superpowers_source }}/superpowers** (skill prefix `{{ sp_prefix }}:`). Install:
+
+```bash
+/plugin marketplace add {{ sp_install_url }}
+/plugin install {{ sp_install_target }}
+```
+
+Routing reference: invoke the `routing` skill or read `.claude/skills/routing/SKILL.md` for the per-skill model tier mapping.
 {%- endif %}
 
 ## License
