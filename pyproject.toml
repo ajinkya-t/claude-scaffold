@@ -1,0 +1,14 @@
+[project]
+name = "claude-scaffold-tests"
+version = "0.1.0"
+description = "Tests for the claude-scaffold Copier template"
+requires-python = ">=3.10"
+dependencies = [
+    "copier>=9.0",
+    "pytest>=8.0",
+    "pyyaml>=6.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v"

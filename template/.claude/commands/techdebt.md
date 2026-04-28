@@ -1,0 +1,27 @@
+---
+description: End-of-session sweep for duplication, dead code, and quick wins.
+allowed-tools: Bash(grep:*), Bash(rg:*), Bash(git diff:*), Bash(git status:*), Read, Glob
+model: claude-haiku-4-5
+---
+
+# /techdebt
+
+Per Boris Cherny: run this at the end of every session to find and kill duplicated code.
+
+Scan staged + unstaged + recently-touched files for:
+
+1. **Duplicated functions** or near-duplicated logic across files.
+2. **Unused imports**, unused variables, dead branches.
+3. **Hardcoded values** that should be named constants (URLs, magic numbers, error strings).
+4. **TODO comments** older than this session that nobody is going to come back to.
+5. **Commented-out code blocks** (delete them; git remembers).
+
+Output format, one per line:
+
+```
+path/to/file:LINE — issue — concrete fix
+```
+
+**Do not modify files.** This is report-only. I'll decide what to act on.
+
+End with a one-line summary: `N findings. M blockers (real duplication). K nits.`

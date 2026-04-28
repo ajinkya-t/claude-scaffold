@@ -1,0 +1,46 @@
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+
+concurrency:
+  group: claude-review-${{ '{{' }} github.event.pull_request.number {{ '}}' }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Claude PR review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ '{{' }} secrets.ANTHROPIC_API_KEY {{ '}}' }}
+          claude_args: "--model claude-sonnet-4-5"
+          prompt: |
+            Review this pull request as a senior engineer would.
+
+            Focus on:
+            - Correctness bugs (off-by-one, null deref, error path gaps, race conditions)
+            - Security issues (injection, secrets, auth gaps, unsafe deserialization, prompt injection in agent code)
+            - Missing tests for new code paths
+            - Convention violations vs the rest of the codebase
+
+            Skip:
+            - Style nits (linters cover those)
+            - TODO comments (tracked separately)
+            - Documentation gaps (separate review)
+
+            Output one comment per finding, anchored at the line. Use 🔴 / 🟡 / 🟢 prefixes for severity.
+            If there are no findings, post a single comment saying "No findings."
+
+            Do not approve or block the PR. Reviews are advisory.

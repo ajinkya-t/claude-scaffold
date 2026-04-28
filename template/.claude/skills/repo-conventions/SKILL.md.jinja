@@ -1,0 +1,87 @@
+---
+name: repo-conventions
+description: |
+  Conventions specific to {{ project_name }}. Loaded automatically when Claude
+  needs guidance on patterns, naming, layout, or workflows in this repo.
+  Update when you find yourself correcting Claude on the same convention twice.
+---
+
+# Repository conventions for {{ project_name }}
+
+This file expands on the boundaries in `AGENTS.md` / `CLAUDE.md`. The rule of thumb: anything that fits in 5 bullets goes in `AGENTS.md`; anything longer goes here.
+
+## Layout
+
+```
+src/                  # production code
+tests/                # mirrors src/ structure
+docs/                 # design docs, ADRs
+scripts/              # one-off and operational scripts
+.claude/              # agent harness — see .claude/README if present
+```
+
+{% if language == 'python' -%}
+## Python conventions
+
+- Type hints on all public functions. `from __future__ import annotations` at the top of every module.
+- Pydantic models for any structured data crossing a boundary (HTTP, file, DB).
+- `@dataclass(frozen=True, slots=True)` for value objects.
+- Logging via `structlog` if added; otherwise stdlib `logging` with `__name__` logger per module.
+- No bare `except:`. Catch the specific exception. Re-raise unless you can actually handle it.
+- Tests use pytest. Fixtures in `conftest.py`. Parametrize over `(input, expected, id)` triples.
+- Naming: `snake_case` for functions/vars, `PascalCase` for classes, `SCREAMING_SNAKE_CASE` for constants, `_leading_underscore` for module-private.
+{% endif %}
+
+{% if language == 'typescript' -%}
+## TypeScript conventions
+
+- Strict mode on. No `any`. If you'd reach for `any`, write a type or use `unknown` and narrow.
+- ESM imports, no CommonJS in new code.
+- Functional components for React; hooks named `use*`.
+- Tests use {% if framework == 'next' %}Vitest{% else %}Jest or Vitest, matching what's already there{% endif %}.
+- Async functions over Promise chains. Don't mix.
+- Naming: `camelCase` for variables/functions, `PascalCase` for types/components, `SCREAMING_SNAKE_CASE` for constants.
+{% endif %}
+
+{% if language == 'go' -%}
+## Go conventions
+
+- Standard project layout: `cmd/<binary>/`, `internal/`, `pkg/` (only if truly reusable across projects).
+- Errors wrapped with `fmt.Errorf("...: %w", err)`. Never just return the inner error without context.
+- Interfaces defined where they're consumed, not where they're implemented.
+- No `panic` in library code. `panic` is only for genuinely unrecoverable invariant violations.
+- Tests as `<file>_test.go`. Table-driven tests preferred.
+{% endif %}
+
+{% if language == 'rust' -%}
+## Rust conventions
+
+- `#![warn(clippy::pedantic)]` in `lib.rs` / `main.rs`. Suppress specific lints with justification, never blanket.
+- `Result<T, E>` over panicking. Custom error types with `thiserror`.
+- `async-trait` only when you need dyn-dispatched async. Otherwise keep it static.
+- Tests in `#[cfg(test)] mod tests` blocks for unit; `tests/` directory for integration.
+{% endif %}
+
+## Workflow
+
+- One task per Claude session. Use `claude --worktree <n>` to run multiple in parallel without conflicts.
+- `/plan` before non-trivial work. The plan goes through review before any code is written.
+- `/review` before `/commit`. `/techdebt` at end of session.
+- Commits: Conventional Commits, one logical change per commit, no AI attribution.
+- PRs: small (~100-300 line diff), one feature, squash-merge.
+
+## Things not to do
+
+- Don't introduce a new dependency without asking. Open a discussion first.
+- Don't refactor unrelated code "while you're here." Separate commit, separate PR.
+- Don't add tests that pass when you delete the implementation. (Per Simon Willison: tests must fail when you revert the change they were written for.)
+- Don't use `--dangerously-skip-permissions` unless you're inside a sandbox.
+
+## When to update this file
+
+Update `repo-conventions/SKILL.md` when:
+- You correct Claude on the same convention twice in one week.
+- A new pattern stabilizes in the codebase that Claude wouldn't infer.
+- A failure mode keeps recurring.
+
+Don't update it for one-off cases. Don't write a 500-line style guide here. The shorter this stays, the more it gets read.

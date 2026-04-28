@@ -1,0 +1,23 @@
+---
+description: Stage and commit current changes with a Conventional Commits message.
+allowed-tools: Bash(git:*)
+model: claude-haiku-4-5
+---
+
+# /commit
+
+1. Run `git status` and `git diff --cached`. If nothing is staged, run `git diff` to see unstaged changes and ask which to stage.
+
+2. Look at `git log --oneline -10` to match the project's commit style.
+
+3. Write a Conventional Commits message:
+   - `<type>(<scope>): <imperative summary, lowercase, no trailing period>`
+   - Types: feat, fix, refactor, perf, test, docs, build, ci, chore
+   - Body: only if the diff isn't self-explanatory. Wrap at 72.
+   - **Never** include `Co-Authored-By: Claude` or any AI attribution. Settings already enforce this.
+
+4. Show the message. Ask: `Commit with this message? [Y/n/edit]`.
+
+5. On approval, `git commit -m "..."`. On `edit`, open `git commit` without `-m` so I can edit in $EDITOR.
+
+One logical change per commit. If the diff covers two unrelated things, refuse and tell me to split.

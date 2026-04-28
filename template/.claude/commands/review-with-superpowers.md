@@ -1,0 +1,20 @@
+---
+description: Review staged + unstaged changes via Superpowers' code-reviewer agent.
+allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(git log:*), Task
+---
+
+# /review-with-superpowers
+
+Thin shim so the keystroke is consistent across configurations. Delegates to the Superpowers `code-reviewer` agent.
+
+1. Run `git status` and `git diff HEAD`. If nothing changed, say so and stop.
+
+2. Read the original spec/plan if present:
+   - `docs/superpowers/specs/*.md` — the design doc
+   - `docs/superpowers/plans/*.md` — the implementation plan
+
+3. Invoke `superpowers:code-reviewer` agent with the diff and the relevant spec/plan paths. The agent will evaluate the implementation against the original plan and coding standards.
+
+4. Also delegate to the project's own `security-auditor` subagent in parallel — Superpowers' code-reviewer doesn't security-review.
+
+5. Compile findings as Critical / Important / Suggestions per the Superpowers code-reviewer convention. End with `Ready to commit? [Y/n]`. Do not commit until I confirm.

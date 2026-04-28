@@ -1,0 +1,34 @@
+name: Template Test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test-render:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        language: [python, typescript, go, rust]
+        agents_strategy: [agents-md-symlink, claude-md]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run tests
+        run: uv run pytest -v
+
+  shellcheck-hooks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ShellCheck the hooks
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          shellcheck template/.claude/hooks/*.sh

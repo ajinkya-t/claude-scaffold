@@ -1,0 +1,148 @@
+---
+name: spec-security-review
+description: Use this skill after a design document is written when the design touches authentication, authorization, secrets, user-supplied input, file uploads, external APIs, database access, deserialization, or third-party services. Threat-models the design before implementation begins.
+---
+
+# spec-security-review
+
+This skill runs in the User-Review-Gate window inside Superpowers' brainstorming flow, parallel with `design-review`. It threat-models the spec before implementation, when fixes are still cheap.
+
+This is different from `superpowers:code-reviewer` and from the project's `/security-review` slash command — both of those review code or diffs. This skill reviews the *design*, before any code exists.
+
+## When to invoke
+
+Auto-invoke when ALL of these are true:
+1. A design document has been written to disk (typically `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`)
+2. The design mentions any security-relevant surface (see trigger keywords below)
+3. The user has not yet approved transition to `writing-plans`
+
+### Trigger keywords (case-insensitive substring match in the design doc)
+
+**Auth and identity:** `auth`, `authentication`, `authorization`, `login`, `signup`, `signin`, `password`, `2fa`, `mfa`, `session`, `cookie`, `token`, `jwt`, `oauth`, `saml`, `oidc`, `permission`, `role`, `rbac`, `acl`
+
+**Secrets and crypto:** `secret`, `api key`, `credential`, `private key`, `public key`, `encrypt`, `decrypt`, `hash`, `signing`, `tls`, `ssl`, `certificate`
+
+**Untrusted input:** `user input`, `user-supplied`, `form`, `upload`, `file upload`, `query parameter`, `request body`, `webhook`, `import`, `parse`, `deserialize`, `pickle`, `yaml.load`
+
+**External surface:** `external api`, `third-party`, `third party`, `webhook`, `outbound request`, `proxy`, `redirect`
+
+**Data layer:** `database`, `sql`, `query`, `orm`, `migration`, `pii`, `personal data`, `gdpr`, `hipaa`
+
+**AI/agent surface:** `prompt`, `llm`, `agent`, `tool call`, `mcp`, `model context`
+
+If NONE of these match in the design, do NOT invoke this skill. Skip silently.
+
+If the design has only one or two weak matches (e.g., "user" appears but no auth surface is being designed), invoke the skill but keep the review brief.
+
+## What this skill does
+
+Threat-model the design across six dimensions. For each, output: the threat, how an attacker could exploit it given the design as written, and the concrete change to the spec needed.
+
+### 1. Trust boundaries
+
+Map every trust boundary the design crosses:
+- User → Application
+- Application → Database
+- Application → Third-party service
+- One internal service → Another internal service
+- Untrusted file/data → Application
+
+For each boundary: what gets validated? What's assumed? Where's the validation specified in the design? If the design is silent on validation at a boundary, that's a finding.
+
+### 2. Authentication and authorization
+
+If the design has any auth surface:
+- **Authentication:** how does a user prove who they are? Is it spec'd in detail or is it hand-waved as "use auth"?
+- **Session management:** how long do sessions last? How are they invalidated? Where are tokens stored?
+- **Authorization:** for every endpoint, action, or resource — *who* is allowed to do *what*? IDOR check: can user A access user B's data by changing an ID in the URL?
+- **Privilege escalation:** can a low-privilege user gain higher privileges through any documented flow?
+
+### 3. Secrets handling
+
+- Where do secrets live in the design? (Env vars, config files, key management service, hardcoded — flag the last as critical)
+- Who can read them? (Process? Container? Host? Logs?)
+- How do they get rotated?
+- Are any secrets going to be logged, returned in API responses, or rendered to the client?
+
+### 4. Injection and untrusted input
+
+For every place user-supplied data enters the system per the design:
+- **SQL injection:** parameterized queries specified? Any string concatenation with user input?
+- **Command injection:** any `subprocess`, `eval`, `exec`, shell calls with user-influenced data?
+- **XSS:** if HTML output, is escaping specified?
+- **Path traversal:** any file paths constructed from user input?
+- **Deserialization:** pickle, YAML.load, or eval-equivalent on user data?
+- **Prompt injection (if AI surface):** can untrusted text reach the LLM context? Are tool calls scoped or gated?
+
+### 5. External-service risks
+
+For every third-party service or API the design depends on:
+- What's the attack surface if the third party is compromised or hostile?
+- Are responses validated/typed before use?
+- What's the failure mode if the service is unavailable? (Could it cause a security failure rather than just a functional one?)
+- Rate limits and abuse prevention — designed in?
+
+### 6. Privacy and data lifecycle
+
+- What user data does this collect? Is it the minimum needed?
+- How long is it retained?
+- Who can access it, and is access logged?
+- Deletion path for the user (GDPR / CCPA)?
+- Cross-border transfer concerns?
+
+## Output
+
+A markdown report saved alongside the design doc, named `<design-doc-stem>-security-review.md`. Structure:
+
+```markdown
+# Security review for <topic>
+
+Reviewed: <design-doc-path>
+
+## Trust boundaries
+- ...
+
+## Auth and authorization
+- ... (or: "No auth surface in scope.")
+
+## Secrets handling
+- ...
+
+## Injection and untrusted input
+- ...
+
+## External-service risks
+- ...
+
+## Privacy and data lifecycle
+- ...
+
+## Threat summary
+- 🔴 Critical (must address before writing-plans): ...
+- 🟡 High (must address before merge): ...
+- 🟢 Track (acceptable risks, follow-up tickets): ...
+```
+
+End with:
+- `RECOMMENDATION: revise design — security blockers must be addressed first` (if any 🔴)
+- `RECOMMENDATION: proceed — issues tracked, mitigations specified` (otherwise)
+
+After saving, present an inline summary and ask:
+> *"Spec security review complete. Report saved to `<path>`. <N> critical, <M> high, <K> tracked. Address blockers, or proceed? [revise / proceed]"*
+
+Wait for the user. If `revise`, return to brainstorming. If `proceed`, return control to brainstorming for transition to `writing-plans`.
+
+## Hard rules
+
+- **Be paranoid.** Default assumption: any input the design doesn't say is validated, isn't.
+- **Never speculate.** "An attacker could maybe…" without a concrete attack path is filler. Find specific exploits or say `No findings.`
+- **Don't reinvent.** If the design says "we use Auth0/Clerk/etc.", you don't need to threat-model the auth provider itself. Threat-model the *integration* — token verification, session handling, what happens on provider outage.
+- **Calibrate severity.** Reserve 🔴 for things that would lead to data exposure, account takeover, or critical-system compromise. 🟡 is for issues that are real but bounded. 🟢 is for accepted-risk items worth noting.
+- **Never proceed to writing-plans yourself.** Hand control back via the prompt above.
+
+## What this skill does NOT do
+
+- Does not review code or diffs (that's `/security-review`, `security-auditor` agent, or `superpowers:code-reviewer`)
+- Does not run static analysis tools (that's the Semgrep pre-commit hook and CI)
+- Does not perform live testing (that's outside the skill's scope)
+- Does not block writing-plans on theoretical risks — only on findings with a concrete attack path

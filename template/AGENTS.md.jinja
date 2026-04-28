@@ -1,0 +1,72 @@
+# {{ project_name }} — Agent Instructions
+{% if project_description %}
+{{ project_description }}
+{% endif %}
+## Stack
+- Language: {{ language }}{% if package_manager != 'none' %} (via `{{ package_manager }}`){% endif %}
+{%- if framework and framework != 'none' %}
+- Framework: {{ framework }}
+{%- endif %}
+{%- if language == 'python' %}
+- Test: `{{ package_manager }} run pytest` · Lint: `{{ package_manager }} run ruff check` · Typecheck: `{{ package_manager }} run pyright`
+{%- elif language == 'typescript' %}
+- Test: `{{ package_manager }} test` · Lint: `{{ package_manager }} run lint` · Typecheck: `{{ package_manager }} run typecheck`
+{%- elif language == 'go' %}
+- Test: `go test ./...` · Lint: `golangci-lint run` · Typecheck: `go vet ./...`
+{%- elif language == 'rust' %}
+- Test: `cargo test` · Lint: `cargo clippy` · Typecheck: `cargo check`
+{%- endif %}
+
+## Layout
+- `src/` production code · `tests/` mirrors `src/` · `docs/` design docs
+- `.claude/` agent harness — see `.claude/skills/repo-conventions/` for details
+
+## Workflow
+- One chat per task. Prefer `claude --worktree <name>` for parallel work.
+{%- if enable_superpowers %}
+- Brainstorming, planning, TDD, debugging, and code review are handled by the Superpowers plugin's auto-triggered skills (`brainstorming`, `writing-plans`, `subagent-driven-development`, `test-driven-development`, `systematic-debugging`, `superpowers:code-reviewer`). Don't use Claude's native plan mode — Superpowers intercepts it.
+- After implementation: `/review-with-superpowers` (delegates to `superpowers:code-reviewer` + the project's `security-auditor`), then `/security-review`, `/commit`, and `/techdebt` at end of session.
+{%- else %}
+- `/plan` before non-trivial work; skip if you can describe the diff in one sentence.
+- Run `/review` before `/commit`. Run `/techdebt` at end of session.
+{%- endif %}
+- Conventional Commits, one logical change per commit.
+{%- if not enable_superpowers and ('code-reviewer' in subagents or 'test-writer' in subagents or 'debugger' in subagents or 'security-auditor' in subagents) %}
+- Use {% set agent_list = [] %}{% if 'code-reviewer' in subagents %}{% set _ = agent_list.append('`code-reviewer`') %}{% endif %}{% if 'test-writer' in subagents %}{% set _ = agent_list.append('`test-writer`') %}{% endif %}{% if 'debugger' in subagents %}{% set _ = agent_list.append('`debugger`') %}{% endif %}{% if 'security-auditor' in subagents %}{% set _ = agent_list.append('`security-auditor`') %}{% endif %}{{ agent_list | join(', ') }} subagents proactively.
+{%- elif enable_superpowers and 'security-auditor' in subagents %}
+- Project subagents: `security-auditor` (used by `/review-with-superpowers` and `/security-review`).
+{%- endif %}
+
+{%- if enable_superpowers %}
+
+## Superpowers integration (USER-LEVEL INSTRUCTIONS — HIGHEST PRIORITY)
+
+These instructions take precedence over Superpowers' skill defaults, per the Superpowers `using-superpowers` priority rules: *"User's explicit instructions (CLAUDE.md, GEMINI.md, AGENTS.md, direct requests) — highest priority. Superpowers skills — override default system behavior where they conflict."*
+
+**During the User-Review-Gate window in `superpowers:brainstorming`** (after the design doc is written to `docs/superpowers/specs/...`, before invoking `superpowers:writing-plans`), you MUST:
+
+1. **Always invoke the project's `design-review` skill** to critique the spec for scope, dependencies, failure modes, and (if UI is in scope) delegate to the `frontend-design` skill from Anthropic's plugin marketplace.
+
+2. **Conditionally invoke the project's `spec-security-review` skill** if the design doc contains any of these keywords (case-insensitive): auth, login, password, token, jwt, oauth, secret, api key, credential, encrypt, hash, user input, upload, parse, deserialize, webhook, external api, third-party, database, sql, query, pii, prompt, llm, agent, tool call, mcp.
+
+3. Both skills produce reports alongside the spec and end by asking the user `revise / proceed`. Wait for the user's choice. Only on `proceed` do you continue to `superpowers:writing-plans`.
+
+This sits *inside* the brainstorming flow's existing User-Review-Gate. It does not replace Superpowers' built-in spec-self-review; it supplements it. The brainstorming skill's `<HARD-GATE>` against `frontend-design` and other implementation skills still applies — `frontend-design` is invoked here only via the `design-review` skill, which itself runs during the user-review-gate (not before design approval), and only when UI is in scope.
+
+If `superpowers:brainstorming` skips this step, the user can manually invoke either skill at any time during the gate window.
+{%- endif %}
+
+## Boundaries
+**Always**: tests pass before declaring done; new code paths get tests; follow existing patterns.
+**Ask first**: schema migrations, new dependencies, CI/infra changes.
+**Never**: commit secrets or `.env*`; force-push to `main`; bypass hooks; modify `vendor/` or generated files.
+
+## Notes
+- Personal overrides go in `CLAUDE.local.md` (gitignored).
+- Library docs: WebFetch on demand. Don't guess current APIs.
+{%- if chrome_extension %}
+- Frontend work: use the Claude in Chrome extension for live verification.
+{%- endif %}
+{%- if enable_bmad %}
+- Substantial new features: consider `Initialize BMAD for this project` for spec-first elicitation.
+{%- endif %}

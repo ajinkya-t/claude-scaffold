@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "outputStyle": "{{ output_style }}",
+{% if model_routing == 'boris-defaults' -%}
+  "model": "claude-sonnet-4-5",
+{% elif model_routing == 'sonnet-only' -%}
+  "model": "claude-sonnet-4-5",
+{% elif model_routing == 'opus-heavy' -%}
+  "model": "claude-opus-4-5",
+{% endif -%}
+  "attribution": {
+    "commit": ""
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git branch:*)",
+      "Bash(git add:*)",
+      "Bash(git restore:*)",
+      "Bash(git stash:*)",
+      "Bash(git worktree:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(find:*)",
+      "Bash(wc:*)",
+      "Bash(jq:*)",
+      "Bash(tree:*)",
+{% if language == 'python' and package_manager == 'uv' -%}
+      "Bash(uv run:*)",
+      "Bash(uv sync:*)",
+      "Bash(uv add:*)",
+      "Bash(uvx:*)",
+      "Bash(pytest:*)",
+      "Bash(ruff:*)",
+      "Bash(pyright:*)",
+{%- elif language == 'python' -%}
+      "Bash(python:*)",
+      "Bash(pytest:*)",
+      "Bash(pip:*)",
+{%- elif language == 'typescript' -%}
+      "Bash({{ package_manager }} run:*)",
+      "Bash({{ package_manager }} test:*)",
+      "Bash({{ package_manager }} install:*)",
+      "Bash(npx:*)",
+{%- elif language == 'go' -%}
+      "Bash(go test:*)",
+      "Bash(go build:*)",
+      "Bash(go run:*)",
+      "Bash(go mod:*)",
+{%- elif language == 'rust' -%}
+      "Bash(cargo:*)",
+{%- endif %}
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh issue list:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Read(./**/credentials.json)",
+      "Read(./**/*.pem)",
+      "Read(./**/*.key)",
+      "Read(./**/id_rsa*)",
+      "Read(./**/id_ed25519*)",
+      "Bash(rm -rf /:*)",
+      "Bash(rm -rf ~:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git reset --hard origin/main:*)",
+      "Bash(git reset --hard origin/master:*)",
+      "WebFetch(domain:internal.example.com)"
+    ]
+  },
+  "hooks": {
+{%- set hook_entries = [] %}
+{%- if 'block-secret-edits' in hooks %}
+{%- set _ = hook_entries.append(('PreToolUse', {
+  "matcher": "Edit|Write|MultiEdit",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/block-secret-edits.sh"
+    }
+  ]
+})) %}
+{%- endif %}
+{%- if 'block-dangerous-bash' in hooks %}
+{%- set _ = hook_entries.append(('PreToolUse', {
+  "matcher": "Bash",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/block-dangerous-bash.sh"
+    }
+  ]
+})) %}
+{%- endif %}
+{%- if 'tests-before-pr' in hooks %}
+{%- set _ = hook_entries.append(('PreToolUse', {
+  "matcher": "mcp__github__create_pull_request|Bash(gh pr create:*)",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/tests-before-pr.sh"
+    }
+  ]
+})) %}
+{%- endif %}
+{%- set pre_tool_use_hooks = [] %}
+{%- for event_name, entry in hook_entries %}
+{%- if event_name == 'PreToolUse' %}
+{%- set _ = pre_tool_use_hooks.append(entry) %}
+{%- endif %}
+{%- endfor %}
+{%- if pre_tool_use_hooks %}
+    "PreToolUse": [
+{%- for entry in pre_tool_use_hooks %}
+      {
+        "matcher": "{{ entry.matcher }}",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{ entry.hooks[0].command }}"
+          }
+        ]
+      }{% if not loop.last %},{% endif %}
+{%- endfor %}
+    ]{% if 'route-perms-to-opus' in hooks %},{% endif %}
+{%- endif %}
+{%- if 'route-perms-to-opus' in hooks %}
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/route-perms-to-opus.sh"
+          }
+        ]
+      }
+    ]
+{%- endif %}
+  }
+}

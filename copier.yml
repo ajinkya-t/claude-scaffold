@@ -1,0 +1,246 @@
+_subdirectory: template
+_min_copier_version: "9.0.0"
+
+_skip_if_exists:
+  - "CLAUDE.md"
+  - "AGENTS.md"
+  - ".gitignore"
+  - "README.md"
+  - ".pre-commit-config.yaml"
+
+_tasks:
+  - "{% if enable_superpowers %}rm -f .claude/commands/plan.md .claude/commands/tdd.md .claude/commands/review.md .claude/agents/code-reviewer.md .claude/agents/test-writer.md .claude/agents/debugger.md{% endif %}"
+  - "{% if not enable_superpowers %}rm -rf .claude/skills/design-review .claude/skills/spec-security-review .claude/commands/review-with-superpowers.md{% endif %}"
+  - "{% if git_init %}git init -q && git add -A && git commit -q -m 'chore: scaffold from claude-scaffold' || true{% endif %}"
+  - "{% if pre_commit %}pre-commit install -q 2>/dev/null || echo 'pre-commit not installed; run: uvx pre-commit install'{% endif %}"
+
+# ---------------------------------------------------------------------------
+# Project metadata
+# ---------------------------------------------------------------------------
+
+project_name:
+  type: str
+  help: Project name (kebab-case)
+  validator: "{% if not (project_name | regex_search('^[a-z][a-z0-9-]*$')) %}Must be lowercase kebab-case{% endif %}"
+
+project_description:
+  type: str
+  help: One-line description
+  default: ""
+
+# ---------------------------------------------------------------------------
+# Stack
+# ---------------------------------------------------------------------------
+
+language:
+  type: str
+  help: Primary language
+  choices:
+    - python
+    - typescript
+    - go
+    - rust
+    - polyglot
+  default: python
+
+framework:
+  type: str
+  help: Framework (or 'none')
+  default: none
+  when: "{{ language in ['python', 'typescript'] }}"
+  choices:
+    fastapi: fastapi
+    django: django
+    flask: flask
+    next: next
+    express: express
+    none: none
+
+package_manager:
+  type: str
+  help: Package manager
+  default: "{% if language == 'python' %}uv{% elif language == 'typescript' %}pnpm{% elif language == 'rust' %}cargo{% elif language == 'go' %}go-mod{% else %}none{% endif %}"
+  choices:
+    - uv
+    - poetry
+    - pip
+    - pnpm
+    - npm
+    - bun
+    - cargo
+    - go-mod
+    - none
+
+# ---------------------------------------------------------------------------
+# Agent file strategy
+# ---------------------------------------------------------------------------
+
+agents_file_strategy:
+  type: str
+  help: |
+    AGENTS.md is vendor-neutral (Codex, Cursor, Aider read it too).
+    'agents-md-symlink' = AGENTS.md is canonical, CLAUDE.md is a 2-line @import. RECOMMENDED.
+    'claude-md' = CLAUDE.md only. Vendor-locked.
+    'both' = Two files, manually kept in sync. Not recommended.
+  choices:
+    - agents-md-symlink
+    - claude-md
+    - both
+  default: agents-md-symlink
+
+# ---------------------------------------------------------------------------
+# MCPs (multi-select)
+# ---------------------------------------------------------------------------
+
+mcps:
+  type: str
+  help: "MCP servers to enable (comma-separated; default safe pair = github,filesystem)"
+  default: "github,filesystem"
+  multiselect: true
+  choices:
+    - github
+    - filesystem
+    - postgres
+    - sqlite
+    - playwright
+    - supabase
+    - ref
+    - chrome-devtools
+
+chrome_extension:
+  type: bool
+  help: |
+    Enable Claude in Chrome extension recommendation in README.
+    Boris Cherny: 'I use the extension every time I work on frontend.'
+  default: "{% if framework in ['next', 'express'] or language == 'typescript' %}true{% else %}false{% endif %}"
+
+# ---------------------------------------------------------------------------
+# Hooks (all four are battle-tested defaults)
+# ---------------------------------------------------------------------------
+
+hooks:
+  type: str
+  help: "Hooks to install (default: all four)"
+  default: "block-secret-edits,block-dangerous-bash,tests-before-pr,route-perms-to-opus"
+  multiselect: true
+  choices:
+    - block-secret-edits
+    - block-dangerous-bash
+    - tests-before-pr
+    - route-perms-to-opus
+
+# ---------------------------------------------------------------------------
+# Subagents
+# ---------------------------------------------------------------------------
+
+subagents:
+  type: str
+  help: "Subagents to install (default: all four)"
+  default: "code-reviewer,test-writer,debugger,security-auditor"
+  multiselect: true
+  choices:
+    - code-reviewer
+    - test-writer
+    - debugger
+    - security-auditor
+
+# ---------------------------------------------------------------------------
+# Output style
+# ---------------------------------------------------------------------------
+
+output_style:
+  type: str
+  help: Default output style
+  default: concise
+  choices:
+    - default
+    - concise
+    - mentor
+
+# ---------------------------------------------------------------------------
+# Model routing
+# ---------------------------------------------------------------------------
+
+model_routing:
+  type: str
+  help: |
+    'boris-defaults' = Opus for arch/security/permission-hooks, Sonnet for plan/iterate, Haiku for /commit /techdebt
+    'sonnet-only' = Single model everywhere
+    'opus-heavy' = Opus default, Sonnet for mechanical
+  choices:
+    - boris-defaults
+    - sonnet-only
+    - opus-heavy
+  default: boris-defaults
+
+# ---------------------------------------------------------------------------
+# Methodology layers (opt-in)
+# ---------------------------------------------------------------------------
+
+include_superpowers_skills:
+  type: bool
+  help: |
+    Cherry-pick 2-3 Superpowers skills (verification-before-completion, systematic-debugging, writing-plans)
+    into the scaffold. Use this if you want SOME Superpowers methodology without installing the full plugin.
+    If you've already installed the full plugin, leave this false and set enable_superpowers=true below.
+  default: false
+
+enable_superpowers:
+  type: bool
+  help: |
+    True if you have installed the full obra/superpowers plugin via the marketplace
+    (/plugin install superpowers@claude-plugins-official).
+    When true: the scaffold drops commands and subagents that overlap with Superpowers
+    (plan, tdd, review, code-reviewer, test-writer, debugger), and ships the
+    design-review and spec-security-review skills that integrate with the
+    Superpowers brainstorming -> writing-plans flow.
+  default: false
+
+enable_bmad:
+  type: bool
+  help: |
+    Add BMAD Method README pointer for spec-driven development.
+    Useful for substantial/security-sensitive features. Sits ABOVE Explore->Plan->Implement, not as a replacement.
+  default: false
+
+# ---------------------------------------------------------------------------
+# CI / pre-commit
+# ---------------------------------------------------------------------------
+
+ci_review:
+  type: bool
+  help: Ship .github/workflows/claude-review.yml and claude-techdebt.yml (uses claude -p headless mode)
+  default: true
+
+pre_commit:
+  type: bool
+  help: Install pre-commit hooks (ruff/prettier/gitleaks)
+  default: true
+
+git_init:
+  type: bool
+  help: Run git init and create initial commit
+  default: true
+
+# ---------------------------------------------------------------------------
+# License
+# ---------------------------------------------------------------------------
+
+license:
+  type: str
+  help: License
+  choices:
+    - MIT
+    - Apache-2.0
+    - proprietary
+  default: MIT
+
+author_name:
+  type: str
+  help: Author name (for LICENSE)
+  default: ""
+
+author_email:
+  type: str
+  help: Author email (optional)
+  default: ""

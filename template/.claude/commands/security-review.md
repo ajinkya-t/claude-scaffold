@@ -1,0 +1,21 @@
+---
+description: Security review of staged changes. Delegates to security-auditor subagent.
+allowed-tools: Bash(git diff:*), Bash(git status:*), Task
+---
+
+# /security-review
+
+1. Run `git diff HEAD` to get the full pending diff.
+
+2. Delegate to the **security-auditor** subagent with the diff.
+
+3. Compile findings into:
+   - 🔴 **Critical** (do not merge): SQL injection, command injection, XSS, auth bypass, secrets in diff, unsafe deserialization
+   - 🟡 **High** (fix before merge): missing input validation at trust boundaries, weak crypto, race conditions in concurrent code, overly permissive permissions
+   - 🟢 **Low** (track and address): missing rate limits, verbose error messages that leak info, unpinned dependencies
+
+4. For each finding: `path/to/file:LINE — vulnerability class — what an attacker could do — concrete fix`.
+
+5. If no findings, say so explicitly. **Don't pad the report with "everything looks fine" filler.**
+
+Note: this is a quick scan, not a substitute for a full security audit. Pair with the built-in `/security-review` for repo-level analysis and Semgrep / CodeQL for deterministic rule coverage.

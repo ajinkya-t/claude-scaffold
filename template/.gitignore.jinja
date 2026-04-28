@@ -1,0 +1,47 @@
+{% if language == 'python' -%}
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyright/
+*.egg-info/
+build/
+dist/
+{% elif language == 'typescript' -%}
+# Node / TypeScript
+node_modules/
+dist/
+build/
+.next/
+.turbo/
+*.tsbuildinfo
+{% elif language == 'rust' -%}
+# Rust
+target/
+Cargo.lock
+{% elif language == 'go' -%}
+# Go
+bin/
+*.exe
+{% endif %}
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Claude Code — personal/local only, never commit
+.claude/settings.local.json
+.claude/.credentials.json
+.claude/cache/
+.claude/worktrees/
+CLAUDE.local.md

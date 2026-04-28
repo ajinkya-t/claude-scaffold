@@ -1,0 +1,53 @@
+# {{ project_name }}
+
+{% if project_description %}{{ project_description }}{% endif %}
+
+## Stack
+
+- Language: {{ language }}{% if framework and framework != 'none' %} ({{ framework }}){% endif %}
+- Package manager: {{ package_manager }}
+
+## Setup
+
+```bash
+{%- if package_manager == 'uv' %}
+uv sync
+{%- elif package_manager == 'poetry' %}
+poetry install
+{%- elif package_manager == 'pip' %}
+pip install -e .
+{%- elif package_manager == 'pnpm' %}
+pnpm install
+{%- elif package_manager == 'npm' %}
+npm install
+{%- elif package_manager == 'bun' %}
+bun install
+{%- elif package_manager == 'cargo' %}
+cargo build
+{%- elif package_manager == 'go-mod' %}
+go mod download
+{%- endif %}
+{%- if pre_commit %}
+uvx pre-commit install
+{%- endif %}
+```
+
+## Working with Claude Code
+
+This project uses a Claude Code harness scaffolded from [claude-scaffold](https://github.com/ajinkya-t/claude-scaffold).
+
+Key conventions:
+- One chat per task; use `claude --worktree <n>` for parallel work
+- `/plan` before non-trivial work, `/review` before `/commit`, `/techdebt` at end of session
+- Agent instructions live in `AGENTS.md` (vendor-neutral, read by Codex/Cursor/Aider too)
+- Settings, hooks, subagents, and skills in `.claude/`
+{%- if chrome_extension %}
+- Frontend work: install the Claude in Chrome extension for live-page verification
+{%- endif %}
+{%- if enable_bmad %}
+- For substantial features: consider BMAD Method for spec-first elicitation (https://github.com/bmad-code-org/BMAD-METHOD)
+{%- endif %}
+
+## License
+
+{{ license }}

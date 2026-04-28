@@ -1,0 +1,38 @@
+{%- if agents_file_strategy == 'agents-md-symlink' -%}
+# {{ project_name }}
+
+@AGENTS.md
+{%- elif agents_file_strategy == 'claude-md' -%}
+# {{ project_name }} — Agent Instructions
+
+{% if project_description %}{{ project_description }}{% endif %}
+
+## Stack
+- Language: {{ language }}{% if package_manager != 'none' %} (via `{{ package_manager }}`){% endif %}
+{%- if framework and framework != 'none' %}
+- Framework: {{ framework }}
+{%- endif %}
+
+## Layout
+- `src/` production code · `tests/` mirrors `src/` · `docs/` design docs
+- `.claude/` agent harness — see `.claude/skills/repo-conventions/` for details
+
+## Workflow
+- One chat per task. Prefer `claude --worktree <n>` for parallel work.
+- `/plan` before non-trivial work; skip if you can describe the diff in one sentence.
+- Run `/review` before `/commit`. Run `/techdebt` at end of session.
+- Conventional Commits, one logical change per commit.
+
+## Boundaries
+**Always**: tests pass before declaring done; new code paths get tests; follow existing patterns.
+**Ask first**: schema migrations, new dependencies, CI/infra changes.
+**Never**: commit secrets or `.env*`; force-push to `main`; bypass hooks; modify `vendor/` or generated files.
+
+## Notes
+- Personal overrides go in `CLAUDE.local.md` (gitignored).
+- Library docs: WebFetch on demand. Don't guess current APIs.
+{%- else -%}
+# {{ project_name }}
+
+@AGENTS.md
+{%- endif %}

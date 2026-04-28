@@ -1,0 +1,112 @@
+---
+name: design-review
+description: Use this skill after a design document or spec has been written and saved to disk, before invoking writing-plans or any implementation skill. Critique designs for clarity, scope, dependency surface, failure modes, and UI quality.
+---
+
+# design-review
+
+This skill runs in the User-Review-Gate window inside Superpowers' brainstorming flow — after the design doc has been written and committed, before `writing-plans` is invoked. It supplements (does not replace) Superpowers' built-in spec-self-review.
+
+## When to invoke
+
+You MUST invoke this skill when ALL of these are true:
+1. A design document has been written to disk (typically `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`)
+2. The user has not yet approved transition to `writing-plans`
+3. You are not currently inside another skill's execution (no skill nesting)
+
+If brainstorming is mid-flow (still asking clarifying questions, no design doc written yet), do NOT invoke this skill. The user-review-gate hasn't opened yet.
+
+## What this skill does
+
+A four-pass review of the spec, then a recommendation.
+
+### Pass 1: Scope and YAGNI
+
+Read the full design doc. For each feature listed, ask:
+- Is this needed for the first working version?
+- Is this needed at all, or is it speculation about future needs?
+- Does removing this break any other listed feature?
+
+Output: a list of features with a verdict (`keep`, `defer`, `cut`) and one-line justification each.
+
+### Pass 2: Dependency surface
+
+Identify every external dependency the design implies:
+- Libraries to install (Python packages, npm modules, system binaries)
+- External services to call (APIs, databases, queues, third-party SaaS)
+- File-system or network surfaces
+
+For each: is it justified? Is there a lighter-weight alternative the design didn't consider? Any dependency added in the last 30 days, or with a single maintainer, or unmaintained, gets flagged loud.
+
+### Pass 3: Failure modes
+
+For each component or feature in the design, write the failure mode:
+- What happens when the third-party call times out, returns 500, or returns malformed data?
+- What happens at zero, one, and large-N input scales?
+- What happens with malformed, malicious, or unicode-heavy input?
+- What happens when two of these run concurrently?
+
+If the design is silent on a failure mode, that's a finding. Don't pad with speculation; flag the gap.
+
+### Pass 4: UI quality (only if UI is in scope)
+
+Trigger condition: design doc mentions any of `UI`, `screen`, `page`, `component`, `form`, `dashboard`, `interface`, `layout`, `mobile`, `responsive`, `Figma`, or names a frontend framework (React, Next, Vue, Svelte, SwiftUI, Jetpack Compose).
+
+If triggered, **delegate to the `frontend-design` skill** by invoking it via the Skill tool with the design doc path as input. The frontend-design skill is Anthropic's first-party skill that pushes designs away from generic AI aesthetics and toward distinctive, considered UI choices. If `frontend-design` is not available (plugin not installed), fall back to a manual checklist:
+
+- Distinctive vs generic? Does the design avoid the purple-gradient default?
+- Information hierarchy clear at a glance?
+- Empty states, loading states, error states all specified?
+- Mobile/narrow-viewport behavior specified?
+- Accessibility: keyboard navigation, ARIA, color contrast addressed?
+
+If UI is NOT in scope, skip Pass 4 entirely.
+
+## Output
+
+A single markdown report saved to the same directory as the design doc, named `<design-doc-stem>-review.md`. Structure:
+
+```markdown
+# Design review for <topic>
+
+Reviewed: <design-doc-path>
+
+## Scope and YAGNI
+- ...
+
+## Dependency surface
+- ...
+
+## Failure modes
+- ...
+
+## UI quality (only if relevant)
+- ...
+
+## Verdict
+- 🔴 Blockers (must address before writing-plans): ...
+- 🟡 Should address (can be tracked as follow-ups): ...
+- 🟢 Nice to have (note in spec, don't block): ...
+```
+
+End the report with one of:
+- `RECOMMENDATION: revise design — see blockers above` (if any 🔴)
+- `RECOMMENDATION: proceed to writing-plans — minor issues tracked as 🟡 / 🟢`
+
+After saving the report, present a 5-line summary to the user inline and ask:
+> *"Design review complete. Report saved to `<path>`. Address blockers, or proceed to writing-plans? [revise / proceed]"*
+
+Wait for the user's response. If `revise`, return to brainstorming. If `proceed`, the user-review-gate is now satisfied — Superpowers' brainstorming skill will invoke `writing-plans` next.
+
+## What this skill does NOT do
+
+- Does not review code (that's `superpowers:code-reviewer`)
+- Does not review the implementation plan (that's covered by `writing-plans`' self-review)
+- Does not write or modify the spec — only critiques it
+- Does not security-review (that's the `spec-security-review` skill which runs in parallel with this one when relevant)
+
+## Hard rules
+
+- **Never block on style preferences.** "I'd write this differently" is not a finding. Only flag things that would cause real problems during implementation.
+- **Never pad.** If a section has no findings, write `No findings.` and move on.
+- **Never proceed to writing-plans yourself.** Always hand control back to the user via the prompt above. The brainstorming skill owns the transition.

@@ -1,0 +1,57 @@
+{
+  "mcpServers": {
+{%- set blocks = [] %}
+{%- if 'github' in mcps %}
+{%- set _ = blocks.append('    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}" }
+    }') %}
+{%- endif %}
+{%- if 'filesystem' in mcps %}
+{%- set _ = blocks.append('    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "${PWD}"]
+    }') %}
+{%- endif %}
+{%- if 'postgres' in mcps %}
+{%- set _ = blocks.append('    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "${DATABASE_URL}"]
+    }') %}
+{%- endif %}
+{%- if 'sqlite' in mcps %}
+{%- set _ = blocks.append('    "sqlite": {
+      "command": "uvx",
+      "args": ["mcp-server-sqlite", "--db-path", "./local.db"]
+    }') %}
+{%- endif %}
+{%- if 'playwright' in mcps %}
+{%- set _ = blocks.append('    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    }') %}
+{%- endif %}
+{%- if 'supabase' in mcps %}
+{%- set _ = blocks.append('    "supabase": {
+      "command": "npx",
+      "args": ["-y", "@supabase/mcp-server-supabase@latest", "--read-only", "--project-ref", "${SUPABASE_PROJECT_REF}"],
+      "env": { "SUPABASE_ACCESS_TOKEN": "${SUPABASE_ACCESS_TOKEN}" }
+    }') %}
+{%- endif %}
+{%- if 'ref' in mcps %}
+{%- set _ = blocks.append('    "ref": {
+      "command": "npx",
+      "args": ["-y", "ref-tools-mcp@latest"],
+      "env": { "REF_API_KEY": "${REF_API_KEY}" }
+    }') %}
+{%- endif %}
+{%- if 'chrome-devtools' in mcps %}
+{%- set _ = blocks.append('    "chrome-devtools": {
+      "command": "npx",
+      "args": ["-y", "chrome-devtools-mcp@latest", "--autoConnect"]
+    }') %}
+{%- endif %}
+{{ blocks | join(',\n') }}
+  }
+}
