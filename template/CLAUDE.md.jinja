@@ -3,7 +3,7 @@
 
 @AGENTS.md
 {%- else -%}
-# {{ project_name }} — Agent Instructions
+# {{ project_name }}
 
 {% if project_description %}{{ project_description }}{% endif %}
 
@@ -12,23 +12,40 @@
 {%- if framework and framework != 'none' %}
 - Framework: {{ framework }}
 {%- endif %}
+{%- if language == 'python' %}
+- Test `{{ package_manager }} run pytest` · Lint `{{ package_manager }} run ruff check` · Typecheck `{{ package_manager }} run pyright`
+{%- elif language == 'typescript' %}
+- Test `{{ package_manager }} test` · Lint `{{ package_manager }} run lint` · Typecheck `{{ package_manager }} run typecheck`
+{%- elif language == 'go' %}
+- Test `go test ./...` · Lint `golangci-lint run` · Typecheck `go vet ./...`
+{%- elif language == 'rust' %}
+- Test `cargo test` · Lint `cargo clippy` · Typecheck `cargo check`
+{%- endif %}
 
 ## Layout
-- `src/` production code · `tests/` mirrors `src/` · `docs/` design docs
-- `.claude/` agent harness — see `.claude/skills/repo-conventions/` for details
+`src/` code · `tests/` mirrors `src/` · `docs/` design docs · `.claude/` agent harness. Personal overrides go in `CLAUDE.local.md` (gitignored).
 
 ## Workflow
-- One chat per task. For parallel work: `git worktree add ../{{ project_name }}-<feature> -b feat/<feature>`.
-- `/plan` before non-trivial work; skip if you can describe the diff in one sentence.
-- Run `/review` before `/commit`. Run `/techdebt` at end of session.
-- Conventional Commits, one logical change per commit.
+{%- if enable_superpowers %}
+Workflow is governed by Superpowers. The `using-superpowers` master dispatcher routes brainstorm → plan → execute → review → verify → finish; the framework auto-fires on conversation start, so do not reinvent the methodology in prose. Native Plan Mode is denied in `settings.json` so the brainstorming and writing-plans skills run in normal mode (per pcvelz upstream guidance). One worktree per task: `using-git-worktrees` handles setup and verifies a clean test baseline. Conventional Commits, one logical change per commit.
+{%- else %}
+Explore → Plan → Implement → Commit. `/plan` before non-trivial work; skip only if the diff fits in one sentence. Run `/review` before `/commit`; run `/techdebt` at session end. One worktree per task via `git worktree add`. Conventional Commits, one logical change per commit.
+{%- endif %}
+
+## Code quality bar
+Project-specific rules; Superpowers' generic YAGNI does not cover these.
+- **No invented APIs.** WebFetch official docs before calling unfamiliar libraries. Do not guess current APIs from training memory.
+- **No swallowed errors.** No bare `except`, no empty `catch {}`, no ignored returns. Errors propagate up or get handled with explicit intent.
+- **No hidden state.** Module-level mutables, singletons, and global config need explicit justification in the plan before introduction.
+- **Pure core, dirty edges.** I/O at boundaries; business logic stays pure and unit-testable. Validate at the edge, trust the inside.
+- **Boring over clever.** Existing patterns in `src/` win against novel ones unless the plan justifies the deviation. New abstractions wait for the third concrete use case.
+- **Size triggers refactor.** Functions over ~50 lines or modules over ~300 lines get a refactor task; comments do not paper over a structural problem.
 
 ## Boundaries
-**Always**: tests pass before declaring done; new code paths get tests; follow existing patterns.
-**Ask first**: schema migrations, new dependencies, CI/infra changes.
-**Never**: commit secrets or `.env*`; force-push to `main`; bypass hooks; modify `vendor/` or generated files.
+**Always**: follow existing patterns in this repo · prior corrections recorded in this file or Auto Memory are binding.
+**Ask first**: schema migrations · new dependencies · new top-level directories · CI/infra changes · new abstractions not in the approved plan.
+**Never**: commit secrets or `.env*` (PreToolUse hook blocks) · force-push `main` · bypass pre-commit (no `--no-verify`) · modify `vendor/`, generated files, or `.claude/plugins/cache/*` · auto-apply security-review suggested patches without human review.
 
-## Notes
-- Personal overrides go in `CLAUDE.local.md` (gitignored).
-- Library docs: WebFetch on demand. Don't guess current APIs.
+## Library docs
+WebFetch official docs on demand. Do not guess current APIs from training memory.
 {%- endif %}
